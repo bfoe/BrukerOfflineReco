@@ -172,7 +172,19 @@ dim=METHODdata["PVM_EncMatrix"]
 try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],4,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 print (FIDrawdata_CPX.shape)
-	
+
+#reorder data
+FIDdata_tmp=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
+FIDdata=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
+order1=METHODdata["PVM_EncSteps1"]+dim[1]/2 							
+for i in range(0,dim[1]): FIDdata_tmp[:,:,order1[i],:]=FIDrawdata_CPX[:,:,i,:]
+FIDrawdata_CPX = 0 #free memory  
+order2=METHODdata["PVM_EncSteps2"]+dim[2]/2 							
+for i in range(0,dim[2]): FIDdata[:,:,:,order2[i]]=FIDdata_tmp[:,:,:,i]
+FIDdata_tmp = 0 #free memory  	
+FIDrawdata_CPX =  FIDdata
+FIDdata = 0 #free memory
+
 #view k-space
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)

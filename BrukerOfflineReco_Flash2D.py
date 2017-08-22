@@ -1,7 +1,7 @@
 #
 # reads Bruker MR data (Paravision v5.1)
 # reconstructs images from raw acquisition data (FID files)
-# this version is for the FLOWMAP method only
+# this version is for the FLASH 3D method only
 #
 # ----- VERSION HISTORY -----
 #
@@ -73,7 +73,7 @@ def ReadParamFile(filepath):
 			    OrigFilename = OrigFilename.replace(".", "_")
 			    OrigFilename = OrigFilename.replace("/", "_")
             if line.startswith('##$'):
-                (param_name, current_line) = line[3:].split('=') # split at "="
+                (param_name, current_line) = line[3:].split('=') #split at "="
                 # if current entry (current_line) is arraysize
                 if current_line[0:2] == "( " and current_line[-3:-1] == " )":
                     value = ParseArray(f, current_line)
@@ -134,7 +134,7 @@ def smooth(x,window_len):
     s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
     w=np.hanning(window_len)
     y=np.convolve(w/w.sum(),s,mode='same')
-    return y[window_len:-window_len+1]		
+    return y[window_len:-window_len+1]	
 	
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -175,26 +175,20 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "FLOWMAP" or METHODdata["FlowMode"] != "VelocityMapping":
-	print ('ERROR: Recon only implemented for FLOWMAP VelocityMapping'); 
-	sys.exit(1)
-if METHODdata["PVM_SpatDimEnum"] !="3D" or METHODdata["FlowEncodingDirection"] != "AllDirections":
-	print ('ERROR: Recon only implemented for 3D acquisition'); 
-	print ('       with flow incoding in all directions');
-	sys.exit(1)
-if METHODdata["FlowEncLoop"] !=4:
-	print ('ERROR: ops, expected flow encoding loop = 4 '); 
+if METHODdata["Method"] != "FLASH" or METHODdata["PVM_SpatDimEnum"] != "2D":
+	print ('ERROR: Recon only implemented for FLASH 2D method'); 
 	sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
 	print ('ERROR: Recon only implemented 1 package'); 
-	sys.exit(1)
+	sys.exit(1)	
 if METHODdata["PVM_NRepetitions"] != 1:
 	print ('ERROR: Recon only implemented 1 repetition'); 
 	sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1 or \
+   METHODdata["PVM_EncZfAccel1"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-	print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
+	print ('ERROR: Recon for parallel acquisition not implemented'); 
+	sys.exit(1)
 
 #start
 print ('Starting recon')	
@@ -202,17 +196,18 @@ print ('Starting recon')
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],4,dim[1],dim[2], order="F")
+dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 
 #reorder data
-FIDdata_tmp=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
-FIDdata=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
-order1=METHODdata["PVM_EncSteps1"]+dim[1]/2 							
-for i in range(0,dim[1]): FIDdata_tmp[:,:,order1[i],:]=FIDrawdata_CPX[:,:,i,:]
+FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
+FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
+order1=METHODdata["PVM_EncSteps1"]+dim[2]/2 							
+for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
 FIDrawdata_CPX = 0 #free memory  
-order2=METHODdata["PVM_EncSteps2"]+dim[2]/2 							
-for i in range(0,dim[2]): FIDdata[:,:,:,order2[i]]=FIDdata_tmp[:,:,:,i]
+order2=METHODdata["PVM_ObjOrderList"]
+for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
 
@@ -222,16 +217,17 @@ print('.', end='') #progress indicator
 #zero fill
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
-FIDdata_ZF=np.empty(shape=(int(dim[0]*zero_fill),4,int(dim[1]*zero_fill),
-			               int(dim[2]*zero_fill)),dtype=np.complex64)
+SpatResol=[SpatResol[0],METHODdata["PVM_SPackArrSliceDistance"],SpatResol[1]]# insert slice dimension
+FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),dim[1],
+					         int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
-dim1start=int(dim[1]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
-FIDdata_ZF[dim0start:dim0start+dim[0],:,dim1start:dim1start+dim[1],dim2start:dim2start+dim[2]] = \
-	FIDdata[0:dim[0],:,0:dim[1],0:dim[2]]
+FIDdata_ZF[dim0start:dim0start+dim[0],:,dim2start:dim2start+dim[2]] = \
+	FIDdata[0:dim[0],:,0:dim[2]]
 FIDdata=FIDdata_ZF;
-FIDdata_ZF = 0 #free memory
-dim=dim*zero_fill; dim=dim.astype(int) 
+FIDdata_ZF = 0 #free memory 
+dim=FIDdata.shape
+print('.', end='') #progress indicator
 
 #FFT (individually by axis, to save memory)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
@@ -240,14 +236,11 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
 IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
+IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
 IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
 IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=3); print('.', end='') #progress indicator
 IMGdata = np.fft.fftshift(IMGdata, axes=(0))
 IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-IMGdata = np.fft.fftshift(IMGdata, axes=(3))
 print('.', end='') #progress indicator
 
 #take Phase Offsets into account
@@ -257,85 +250,35 @@ print('.', end='') #progress indicator
 # which permits sub-pixel precision
 #
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
-PackArrPhase2Offset=METHODdata["PVM_SPackArrPhase2Offset"]
 SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
 SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
-dim1_offset=int(round(PackArrPhase1Offset/SpatResol[0])) 
-dim2_offset=-int(round(SPackArrSliceOffset/SpatResol[2]))
-IMGdata = np.roll(IMGdata,-dim1_offset,axis=(2))
-IMGdata = np.roll(IMGdata,-dim2_offset,axis=(3))
+dim2_offset=int(round(PackArrPhase1Offset/SpatResol[2])) 
+IMGdata = np.roll(IMGdata,-dim2_offset,axis=(2))
 
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]
 dim0start=int((dim[0]-dim[0]/crop[0])/2)
-dim1start=int((dim[1]-dim[1]/crop[1])/2)
-dim2start=int((dim[2]-dim[2]/crop[2])/2)
+dim2start=int((dim[2]-dim[2]/crop[1])/2)
 dim0end = int(dim0start+dim[0]/crop[0])
-dim1end = int(dim1start+dim[1]/crop[1])
-dim2end = int(dim2start+dim[2]/crop[2])
-IMGdata = IMGdata[dim0start:dim0end,:,dim1start:dim1end,dim2start:dim2end]
-dim[0] /= int(crop[0])
-dim[1] /= int(crop[1])
-dim[2] /= int(crop[2])
+dim2end = int(dim2start+dim[2]/crop[1])
+IMGdata = IMGdata[dim0start:dim0end,:,dim2start:dim2end]
 print('.', end='') #progress indicator
 
-
-# Hadamard decoding
-#
-# from https://www.ncbi.nlm.nih.gov/pubmed/1790361
-# Simultaneous acquisition of phase-contrast angiograms and stationary-tissue
-# images with Hadamard encoding of flow-induced phase shifts.
-# Dumoulin CL, Souza SP, Darrow RD, Pelc NJ, Adams WJ, Ash SA.
-# J Magn Reson Imaging. 1991 Jul-Aug;1(4):399-404.
-# DOI: 10.1002/jmri.1880010403
-#
-# Exp0 = -1 -1 -1
-# Exp1 = +1 +1 -1
-# Exp2 = +1 -1 +1
-# Exp3 = -1 +1 +1
-#
-# Stationary =  Exp0 + Exp1 + Exp2 + Exp3
-# Flow_X     = -Exp0 + Exp1 + Exp2 - Exp3
-# Flow_Y     = -Exp0 + Exp1 - Exp2 + Exp3
-# Flow_Z     = -Exp0 - Exp1 + Exp2 + Exp3
-#
-#
-# to recon magnitude images take the complex difference (+-)
-IMGdata_decoded_ABS = np.empty(shape=(dim[0],5,dim[1],dim[2]),dtype=np.float32)
-IMGdata_decoded_ABS [:,0,:,:] = np.abs(    IMGdata [:,0,:,:] + IMGdata [:,1,:,:] + IMGdata [:,2,:,:] + IMGdata [:,3,:,:])
-IMGdata_decoded_ABS [:,1,:,:] = np.abs( -1*IMGdata [:,0,:,:] + IMGdata [:,1,:,:] + IMGdata [:,2,:,:] - IMGdata [:,3,:,:])
-IMGdata_decoded_ABS [:,2,:,:] = np.abs( -1*IMGdata [:,0,:,:] + IMGdata [:,1,:,:] - IMGdata [:,2,:,:] + IMGdata [:,3,:,:])
-IMGdata_decoded_ABS [:,3,:,:] = np.abs( -1*IMGdata [:,0,:,:] - IMGdata [:,1,:,:] + IMGdata [:,2,:,:] + IMGdata [:,3,:,:])
-IMGdata_decoded_ABS [:,4,:,:] = np.sqrt(np.power(IMGdata_decoded_ABS[:,1,:,:],2) +
-                                        np.power(IMGdata_decoded_ABS[:,2,:,:],2) +
-										np.power(IMGdata_decoded_ABS[:,3,:,:],2))
-# to recon magnitude images take the complex division (*/)
-IMGdata_decoded_PH = np.empty(shape=(dim[0],5,dim[1],dim[2]),dtype=np.float32)
-IMGdata_decoded_PH [:,0,:,:] = -1.0*np.angle(   IMGdata [:,0,:,:] * IMGdata [:,1,:,:] * IMGdata [:,2,:,:] * IMGdata [:,3,:,:])
-IMGdata_decoded_PH [:,1,:,:] = -1.0*np.angle( 1/IMGdata [:,0,:,:] * IMGdata [:,1,:,:] * IMGdata [:,2,:,:] / IMGdata [:,3,:,:])
-IMGdata_decoded_PH [:,2,:,:] = -1.0*np.angle( 1/IMGdata [:,0,:,:] * IMGdata [:,1,:,:] / IMGdata [:,2,:,:] * IMGdata [:,3,:,:])
-IMGdata_decoded_PH [:,3,:,:] = -1.0*np.angle( 1/IMGdata [:,0,:,:] / IMGdata [:,1,:,:] * IMGdata [:,2,:,:] * IMGdata [:,3,:,:])
-IMGdata_decoded_PH [:,4,:,:] = np.sqrt(np.power(IMGdata_decoded_PH[:,1,:,:],2) +
-                                        np.power(IMGdata_decoded_PH[:,2,:,:],2) +
-										np.power(IMGdata_decoded_PH[:,3,:,:],2))
-
 #permute dimensions
-#worx for PVM_SPackArrSliceOrient=sagittal, PVM_SPackArrReadOrient="H_F"
+#worx for PVM_SPackArrSliceOrient=axial, PVM_SPackArrReadOrient="L_R"
 #this way results are comparabled to ImageJ's BrukerOpener plugin
 SpatResol_perm = np.empty(shape=(3))
-SpatResol_perm[0]=SpatResol[1]
-SpatResol_perm[1]=SpatResol[0]
-SpatResol_perm[2]=SpatResol[2]
-IMGdata_decoded_ABS = np.transpose (IMGdata_decoded_ABS, axes=(2,1,0,3))
-IMGdata_decoded_ABS = np.rot90(IMGdata_decoded_ABS, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
-IMGdata_decoded_PH = np.transpose (IMGdata_decoded_PH, axes=(2,1,0,3))
-IMGdata_decoded_PH = np.rot90(IMGdata_decoded_PH, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
+SpatResol_perm[0]=SpatResol[0]
+SpatResol_perm[1]=SpatResol[2]
+SpatResol_perm[2]=SpatResol[1]
+IMGdata = np.transpose (IMGdata, axes=(0,2,1))
+IMGdata = IMGdata[::-1,:,:] # flip axis
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-steps=100; start=1; fin=np.max(IMGdata_decoded_ABS [:,4,:,:])
+steps=100; start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
 xbins =  np.linspace(start,fin,steps)
-ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,4,:,:], bins=xbins)
+ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
 ybins = smooth(ybins,steps/20)
 start=ybins.argmax()
@@ -345,94 +288,50 @@ while i<len(ybins):
     if ybins[i]<=miny: miny=ybins[i]; minx=i; 
     else: i=len(ybins);
 threshold=xbins[minx]
-mask =  IMGdata_decoded_ABS [:,4,:,:] > threshold  
+mask =  np.abs(IMGdata[:,:,:]) > threshold  
 #enable the following view histogram plot
 #print ('\nThreshold = %.2e' % threshold)
 #import pylab; pylab.plot(xbins,ybins, linewidth=1.5); pylab.draw();
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
 #transform to int
-max_= np.amax(IMGdata_decoded_ABS);
-IMGdata_decoded_ABS *= 32767./max_
-IMGdata_decoded_ABS = IMGdata_decoded_ABS.astype(np.int16)
+IMGdata_ABS = np.abs(IMGdata); 
+max_= np.amax(IMGdata_ABS);
+IMGdata_ABS *= 32767./max_
+IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-IMGdata_decoded_PH [:,0,:,:] *= mask*32767./np.pi
-IMGdata_decoded_PH [:,1,:,:] *= mask*32767./np.pi
-IMGdata_decoded_PH [:,2,:,:] *= mask*32767./np.pi
-IMGdata_decoded_PH [:,3,:,:] *= mask*32767./np.pi
-IMGdata_decoded_PH [:,4,:,:] *= mask*32767./(np.sqrt(np.power(np.pi,2)*3)) # 5.44
-IMGdata_decoded_PH = IMGdata_decoded_PH.astype(np.int16)
+#IMGdata_PH  = np.angle(IMGdata)
+IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
+max_= np.pi; 
+IMGdata_PH *= 32767./max_
+IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
 
-#createNIFTI's
-venc=METHODdata["FlowRange"]
+#try to set default W/L right (not worx)
+#IMGdata_PH[0,0,0]=-32768
+#IMGdata_PH[-1,-1,-1]=32767
+
+#save NIFTI
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[2]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[3]/2)*aff[2,2]
-#write Magnitude static
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(1,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Static.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-#write Magnitude flow
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,4,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(1,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Flow.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-#write Phase flow X
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,1,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(venc/32767.,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_X.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-#write Phase flow Y
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,2,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(venc/32767.,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_Y.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-#write Phase flow Z
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,3,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(venc/32767.,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_Z.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-print('.', end='') #progress indicator
-#write Phase flow ALL
-NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,4,:,:], aff)
-NIFTIimg.header['sform_code']=1
-NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(np.sqrt(3)*venc/32767.,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow.nii.gz'))
-except: print ('\nERROR:  problem while writing results'); sys.exit(1)
-print('.', end='') #progress indicator
-#writesucess	
-print ('\nSuccessfully written output files '+OrigFilename+'_*.nii.gz')	
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
+NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
+NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
+NIFTIimg_ABS.header['sform_code']=1
+NIFTIimg_ABS.header['qform_code']=1
+NIFTIimg_ABS.header.set_slope_inter(1,0)
+NIFTIimg_PH.header.set_slope_inter(np.pi/32767.,0)
+#write
+try:
+    print('.', end='') #progress indicator
+    nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
+    print('.', end='') #progress indicator
+    nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
+except:
+	print ('\nERROR:  problem while writing results'); sys.exit(1)
+print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')	
 
-#write flowvolume results
-with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
-    text_file.write("Flow Volumes per slice (X):\n")
-    for i in range(0,IMGdata_decoded_PH.shape[2]): # in our data shape[2] is the main flow direction
-	    flowvol = np.sum(IMGdata_decoded_PH[:,1,i,:])
-	    flowvol *= 10.*venc/32767. # venc is in cm/s, multiply by 10. to get this in mm/s
-	    flowvol *= SpatResol_perm[0]*SpatResol_perm[2] # multiply with inplane spatial resolution, result is in mm^3/s
-	    flowvol /= 1000. # convert mm^3/s ---> ml/s
-	    text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
-    text_file.write("\n")
-	
 #end
 if sys.platform=="win32": os.system("pause") # windows
 else: 

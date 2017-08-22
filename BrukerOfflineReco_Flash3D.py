@@ -214,7 +214,7 @@ print('.', end='') #progress indicator
 #to do
 
 #zero fill
-zero_fill=1.
+zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),int(dim[1]*zero_fill),
 					         int(dim[2]*zero_fill)),dtype=np.complex64)
@@ -275,9 +275,9 @@ print('.', end='') #progress indicator
 #worx for PVM_SPackArrSliceOrient=sagittal, PVM_SPackArrReadOrient="H_F"
 #this way results are comparabled to ImageJ's BrukerOpener plugin
 SpatResol_perm = np.empty(shape=(3))
-SpatResol_perm[0]=SpatResol[0]
-SpatResol_perm[1]=SpatResol[2]
-SpatResol_perm[2]=SpatResol[1]
+SpatResol_perm[0]=SpatResol[1]
+SpatResol_perm[1]=SpatResol[0]
+SpatResol_perm[2]=SpatResol[2]
 IMGdata = np.transpose (IMGdata, axes=(1,0,2))
 IMGdata = np.rot90(IMGdata, k=2, axes=(0, 2)) # k=2 is a 180 degree rotation
 print('.', end='') #progress indicator
@@ -307,12 +307,16 @@ max_= np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-IMGdata_PH  = np.angle(IMGdata)
-#IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
+#IMGdata_PH  = np.angle(IMGdata)
+IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
 max_= np.pi; 
 IMGdata_PH *= 32767./max_
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
+
+#try to set default W/L right (not worx)
+#IMGdata_PH[0,0,0]=-32768
+#IMGdata_PH[-1,-1,-1]=32767
 
 #save NIFTI
 aff = np.eye(4)
