@@ -175,8 +175,8 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "FLASH" or METHODdata["PVM_SpatDimEnum"] != "2D":
-	print ('ERROR: Recon only implemented for FLASH 2D method'); 
+if METHODdata["Method"] != "RARE" or METHODdata["PVM_SpatDimEnum"] != "2D":
+	print ('ERROR: Recon only implemented for RARE 2D method'); 
 	sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
 	print ('ERROR: Recon only implemented 1 package'); 
@@ -185,8 +185,7 @@ if METHODdata["PVM_NRepetitions"] != 1:
 	print ('ERROR: Recon only implemented 1 repetition'); 
 	sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or \
-   METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
+   METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
 	print ('ERROR: Recon for parallel acquisition not implemented'); 
 	sys.exit(1)
 
@@ -196,9 +195,12 @@ print ('Starting recon')
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
-dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
+dim=[dim[0],METHODdata["PVM_RareFactor"],METHODdata["PVM_SPackArrNSlices"],int(dim[1]/METHODdata["PVM_RareFactor"])]
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2],dim[3], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
+FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,3,1))
+FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[2],dim[3]*dim[1])
+dim = FIDrawdata_CPX.shape
 
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
@@ -210,6 +212,18 @@ order2=METHODdata["PVM_ObjOrderList"]
 for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
+
+#specific to RARE:
+#number of total phase encodings is a multiple of turbo factor
+target_dim2  = METHODdata["PVM_Matrix"][1]
+floored_dim2 = METHODdata["PVM_EncMatrix"][1]
+if floored_dim2 < target_dim2:
+	dim2start=int((target_dim2-floored_dim2)/2)
+	FIDdata_tmp = np.empty(shape=(dim[0],dim[1],target_dim2),dtype=np.complex64)
+	FIDdata_tmp [:,:,dim2start:dim2start+dim[2]] = FIDdata[:,:,0:dim[2]]
+	FIDdata = FIDdata_tmp
+	FIDdata_tmp = 0 # free memory
+	dim = FIDdata.shape
 
 #Hanning filter
 #to do
@@ -230,12 +244,9 @@ dim=FIDdata.shape
 print('.', end='') #progress indicator
 
 #FFT (individually by axis, to save memory)
-EchoPosition_raw=METHODdata["PVM_EchoPosition"]
-EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
-EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
-IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+IMGdata = np.fft.fftshift(IMGdata, axes=(0))
 IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
 IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
 IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
@@ -319,10 +330,6 @@ max_= np.pi;
 IMGdata_PH *= 32767./max_
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
-
-#try to set default W/L right (not worx)
-#IMGdata_PH[0,0,0]=-32768
-#IMGdata_PH[-1,-1,-1]=32767
 
 #save NIFTI
 aff = np.eye(4)
