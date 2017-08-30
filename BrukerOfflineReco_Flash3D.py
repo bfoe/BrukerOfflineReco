@@ -44,18 +44,18 @@ import nibabel as nib
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
 except: 
-	try: from tkinter.filedialog import askopenfilename; # Python3
-	except: TK_installed=False
+    try: from tkinter.filedialog import askopenfilename; # Python3
+    except: TK_installed=False
 try: import Tkinter as tk; # Python2
 except: 
-	try: import tkinter as tk; # Python3
-	except: TK_installed=False
+    try: import tkinter as tk; # Python3
+    except: TK_installed=False
 if not TK_installed:
-	print ('ERROR: tkinter not installed')
-	print ('       on Linux try "yum install tkinter"')
-	print ('       on MacOS install ActiveTcl from:')
-	print ('       http://www.activestate.com/activetcl/downloads')
-	sys.exit(2)
+    print ('ERROR: tkinter not installed')
+    print ('       on Linux try "yum install tkinter"')
+    print ('       on MacOS install ActiveTcl from:')
+    print ('       http://www.activestate.com/activetcl/downloads')
+    sys.exit(2)
 
 def ReadParamFile(filepath):
     global OrigFilename;
@@ -68,10 +68,10 @@ def ReadParamFile(filepath):
                 break
             # when line contains parameter
             if line.startswith('$$ /'):
-			    OrigFilename = line[line.find('/nmr/')+5:]
-			    OrigFilename = OrigFilename[0:len(OrigFilename)-8]
-			    OrigFilename = OrigFilename.replace(".", "_")
-			    OrigFilename = OrigFilename.replace("/", "_")
+                OrigFilename = line[line.find('/nmr/')+5:]
+                OrigFilename = OrigFilename[0:len(OrigFilename)-8]
+                OrigFilename = OrigFilename.replace(".", "_")
+                OrigFilename = OrigFilename.replace("/", "_")
             if line.startswith('##$'):
                 (param_name, current_line) = line[3:].split('=') #split at "="
                 # if current entry (current_line) is arraysize
@@ -91,7 +91,7 @@ def ReadParamFile(filepath):
                 # save parsed value to dict
                 param_dict[param_name] = value
     return param_dict
-	
+    
 def ParseArray(current_file, line):
     # extract the arraysize and convert it to numpy
     line = line[1:-2].replace(" ", "").split(",")
@@ -127,15 +127,15 @@ def ParseSingleValue(val):
         except ValueError:
             # if not, should  be string. Remove  newline character.
             result = val.rstrip('\n')
-    return result	
+    return result   
 
 def smooth(x,window_len):
     w=np.hanning(window_len)
     s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
     w=np.hanning(window_len)
     y=np.convolve(w/w.sum(),s,mode='same')
-    return y[window_len:-window_len+1]	
-	
+    return y[window_len:-window_len+1]  
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -144,7 +144,7 @@ if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')
 python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
 # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
 if sys.platform=="win32": os.system("title "+Program_name)
-	
+    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
 TKwindows.update()
@@ -158,7 +158,7 @@ except: pass
 try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
 except: pass
 TKwindows.update()
-	
+    
 #intercatively choose input FID file
 FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files","fid")])
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
@@ -175,23 +175,23 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "FLASH" or METHODdata["PVM_SpatDimEnum"] != "3D":
-	print ('ERROR: Recon only implemented for FLASH 3D method'); 
-	sys.exit(1)
+if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP") or METHODdata["PVM_SpatDimEnum"] != "3D":
+    print ('ERROR: Recon only implemented for FLASH/FISP 3D method'); 
+    sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
-	print ('ERROR: Recon only implemented 1 package'); 
-	sys.exit(1)
+    print ('ERROR: Recon only implemented 1 package'); 
+    sys.exit(1)
 if METHODdata["PVM_NRepetitions"] != 1:
-	print ('ERROR: Recon only implemented 1 repetition'); 
-	sys.exit(1)
+    print ('ERROR: Recon only implemented 1 repetition'); 
+    sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
    METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-	print ('ERROR: Recon for parallel acquisition not implemented'); 
-	sys.exit(1)
+    print ('ERROR: Recon for parallel acquisition not implemented'); 
+    sys.exit(1)
 
 #start
-print ('Starting recon')	
+print ('Starting recon')    
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
@@ -202,10 +202,10 @@ except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.ex
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-order1=METHODdata["PVM_EncSteps1"]+dim[1]/2 							
+order1=METHODdata["PVM_EncSteps1"]+dim[1]/2                             
 for i in range(0,dim[1]): FIDdata_tmp[:,order1[i],:]=FIDrawdata_CPX[:,i,:]
 FIDrawdata_CPX = 0 #free memory  
-order2=METHODdata["PVM_EncSteps2"]+dim[2]/2 							
+order2=METHODdata["PVM_EncSteps2"]+dim[2]/2                             
 for i in range(0,dim[2]): FIDdata[:,:,order2[i]]=FIDdata_tmp[:,:,i]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
@@ -217,12 +217,12 @@ print('.', end='') #progress indicator
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),int(dim[1]*zero_fill),
-					         int(dim[2]*zero_fill)),dtype=np.complex64)
+                             int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim1start=int(dim[1]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
 FIDdata_ZF[dim0start:dim0start+dim[0],dim1start:dim1start+dim[1],dim2start:dim2start+dim[2]] = \
-	FIDdata[0:dim[0],0:dim[1],0:dim[2]]
+    FIDdata[0:dim[0],0:dim[1],0:dim[2]]
 FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory 
 dim=FIDdata.shape
@@ -274,32 +274,64 @@ print('.', end='') #progress indicator
 #permute dimensions
 #worx for PVM_SPackArrSliceOrient=sagittal, PVM_SPackArrReadOrient="H_F"
 #this way results are comparabled to ImageJ's BrukerOpener plugin
-SpatResol_perm = np.empty(shape=(3))
-SpatResol_perm[0]=SpatResol[1]
-SpatResol_perm[1]=SpatResol[0]
-SpatResol_perm[2]=SpatResol[2]
-IMGdata = np.transpose (IMGdata, axes=(1,0,2))
-IMGdata = np.rot90(IMGdata, k=2, axes=(0, 2)) # k=2 is a 180 degree rotation
+if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
+    if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[1]
+        SpatResol_perm[1]=SpatResol[0]
+        SpatResol_perm[2]=SpatResol[2]
+        IMGdata = np.transpose (IMGdata, axes=(1,0,2))
+        IMGdata = np.rot90(IMGdata, k=2, axes=(0, 2)) # k=2 is a 180 degree rotation
+    else:
+        SpatResol_perm=SpatResol    
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');
+elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
+    if METHODdata["PVM_SPackArrReadOrient"] == "L_R":
+        SpatResol_perm = SpatResol
+        IMGdata = IMGdata[::-1,:,:] # flip axis (axial L_R)
+        IMGdata = IMGdata[:,:,::-1] # flip axis (axial L_R)
+    else:
+        SpatResol_perm=SpatResol    
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');
+else:
+    SpatResol_perm=SpatResol
+    print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+            METHODdata["PVM_SPackArrReadOrient"]);
+    print ('         resulting images may be rotated incorrectly');         
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-steps=100; start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
+n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
+steps=int(n_points/1000); start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
 xbins =  np.linspace(start,fin,steps)
 ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
 ybins = smooth(ybins,steps/20)
-start=ybins.argmax()
-i=start;minx=0;miny=ybins[start]
+#--- old code find minimum ---
+#start=ybins.argmax()
+#i=start;minx=0;miny=ybins[start]
+#while i<len(ybins):
+#    i+=1
+#    if ybins[i]<=miny: miny=ybins[i]; minx=i; 
+#    else: i=len(ybins);
+#threshold=xbins[minx]
+#--- new code find FWHM ---
+start=ybins.argmax(); i=start
 while i<len(ybins):
     i+=1
-    if ybins[i]<=miny: miny=ybins[i]; minx=i; 
-    else: i=len(ybins);
-threshold=xbins[minx]
-mask =  np.abs(IMGdata[:,:,:]) > threshold  
+    if ybins[i]<np.max(ybins)/2: 
+        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
+        i=len(ybins);        
+mask =  abs(IMGdata [:,:,:]) > threshold  
 #enable the following view histogram plot
 #print ('\nThreshold = %.2e' % threshold)
 #import pylab; pylab.plot(xbins,ybins, linewidth=1.5); pylab.draw();
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
+
 
 #transform to int
 IMGdata_ABS = np.abs(IMGdata); 
@@ -313,10 +345,6 @@ max_= np.pi;
 IMGdata_PH *= 32767./max_
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
-
-#try to set default W/L right (not worx)
-#IMGdata_PH[0,0,0]=-32768
-#IMGdata_PH[-1,-1,-1]=32767
 
 #save NIFTI
 aff = np.eye(4)
@@ -336,8 +364,8 @@ try:
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
 except:
-	print ('\nERROR:  problem while writing results'); sys.exit(1)
-print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')	
+    print ('\nERROR:  problem while writing results'); sys.exit(1)
+print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
 
 #end
 if sys.platform=="win32": os.system("pause") # windows

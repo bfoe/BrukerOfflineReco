@@ -151,8 +151,12 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "FLASH" or METHODdata["PVM_SpatDimEnum"] != "2D":
-    print ('ERROR: Recon only implemented for FLASH 2D method'); sys.exit(1)
+if METHODdata["Method"] != "FLOWMAP" or METHODdata["FlowMode"] != "VelocityMapping":
+    print ('ERROR: Recon only implemented for FLOWMAP VelocityMapping'); sys.exit(1)
+if METHODdata["PVM_SpatDimEnum"] != "2D" or METHODdata["FlowEncodingDirection"] != "SliceDirection":
+    print ('ERROR: Recon only implemented for 2D acquisition with flow incoding in slice direction'); sys.exit(1)
+if METHODdata["FlowEncLoop"] !=2:
+    print ('ERROR: ops, expected flow encoding loop = 2 '); sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
     print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
 if METHODdata["PVM_NRepetitions"] != 1:
@@ -160,27 +164,27 @@ if METHODdata["PVM_NRepetitions"] != 1:
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
    METHODdata["PVM_EncZfAccel1"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-    print ('ERROR: Recon for parallel acquisition not implemented'); 
-    sys.exit(1)
+    print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
 dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],2,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 
 #reorder data
-FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
+FIDdata_tmp=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)
+FIDdata=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
-for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
+for i in range(0,dim[2]): FIDdata_tmp[:,:,:,order1[i]]=FIDrawdata_CPX[:,:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
-for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+for i in range(0,dim[1]): FIDdata[:,:,order2[i],:]=FIDdata_tmp[:,:,i,:]
 FIDdata_tmp = 0 #free memory  
 FIDrawdata_CPX =  FIDdata
 FIDdata = 0 #free memory
+
     
 #view k-space
 dim = FIDrawdata_CPX.shape
@@ -190,11 +194,11 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 # show the resulting images
 pl.figure()
 pl.subplot(131)
-pl.imshow(abs(FIDrawdata_CPX[:,:,dim[2]/2]))
+pl.imshow(abs(FIDrawdata_CPX[:,0,dim[2]/2,:]))
 pl.subplot(132)
-pl.imshow(abs(FIDrawdata_CPX[:,dim[1]/2,:]))
+pl.imshow(abs(FIDrawdata_CPX[:,0,:,dim[3]/2]))
 pl.subplot(133)
-pl.imshow(abs(FIDrawdata_CPX[EchoPosition,:,:]))
+pl.imshow(abs(FIDrawdata_CPX[EchoPosition,0,:,:]))
 pl.show()
     
     

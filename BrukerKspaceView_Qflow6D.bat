@@ -1,0 +1,2 @@
+BrukerKspaceView_Qflow6D.py
+pause

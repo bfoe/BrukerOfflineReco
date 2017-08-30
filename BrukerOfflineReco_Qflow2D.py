@@ -175,53 +175,41 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP") or METHODdata["PVM_SpatDimEnum"] != "2D":
-    print ('ERROR: Recon only implemented for FLASH/FISP 2D method'); 
-    sys.exit(1)
+if METHODdata["Method"] != "FLOWMAP" or METHODdata["FlowMode"] != "VelocityMapping":
+    print ('ERROR: Recon only implemented for FLOWMAP VelocityMapping'); sys.exit(1)
+if METHODdata["PVM_SpatDimEnum"] != "2D" or METHODdata["FlowEncodingDirection"] != "SliceDirection":
+    print ('ERROR: Recon only implemented for 2D acquisition with flow incoding in slice direction'); sys.exit(1)
+if METHODdata["FlowEncLoop"] !=2:
+    print ('ERROR: ops, expected flow encoding loop = 2 '); sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
-    print ('ERROR: Recon only implemented 1 package'); 
-    sys.exit(1) 
+    print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
 if METHODdata["PVM_NRepetitions"] != 1:
-    print ('ERROR: Recon only implemented 1 repetition'); 
-    sys.exit(1)
+    print ('ERROR: Recon only implemented 1 repetition'); sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
    METHODdata["PVM_EncZfAccel1"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-    print ('ERROR: Recon for parallel acquisition not implemented'); 
-    sys.exit(1)
+    print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
 
 #start
 print ('Starting recon')    
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
-if  METHODdata["Method"] == "FLASH":
-    dim=METHODdata["PVM_EncMatrix"]
-    dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
-    except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
-elif METHODdata["Method"] == "FISP":
-    dim=METHODdata["PVM_EncMatrix"]
-    dim=[dim[0],dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
-    except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
-    FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,1))
-    dim = FIDrawdata_CPX.shape
-else:
-    print ('Error: unknown method',METHODdata["Method"])
-    sys.exit(1)   
+dim=METHODdata["PVM_EncMatrix"]
+dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],2,dim[1],dim[2], order="F")
+except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 
 #reorder data
-FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
+FIDdata_tmp=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)
+FIDdata=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
-for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
+for i in range(0,dim[2]): FIDdata_tmp[:,:,:,order1[i]]=FIDrawdata_CPX[:,:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
-for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+for i in range(0,dim[1]): FIDdata[:,:,order2[i],:]=FIDdata_tmp[:,:,i,:]
 FIDdata_tmp = 0 #free memory  
-print('.', end='') #progress indicator
-
+FIDrawdata_CPX =  0 #free memory
 
 #Hanning filter
 #to do
@@ -230,12 +218,12 @@ print('.', end='') #progress indicator
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 SpatResol=[SpatResol[0],METHODdata["PVM_SPackArrSliceDistance"],SpatResol[1]]# insert slice dimension
-FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),dim[1],
+FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),2,dim[1],
                              int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
-FIDdata_ZF[dim0start:dim0start+dim[0],:,dim2start:dim2start+dim[2]] = \
-    FIDdata[0:dim[0],:,0:dim[2]]
+FIDdata_ZF[dim0start:dim0start+dim[0],:,:,dim2start:dim2start+dim[2]] = \
+    FIDdata[0:dim[0],:,:,0:dim[2]]
 FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory 
 dim=FIDdata.shape
@@ -248,11 +236,11 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
 IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
+IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
 IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
+IMGdata = np.fft.fft(IMGdata, axis=3); print('.', end='') #progress indicator
 IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+IMGdata = np.fft.fftshift(IMGdata, axes=(3))
 print('.', end='') #progress indicator
 
 #take Phase Offsets into account
@@ -265,16 +253,25 @@ PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
 SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
 SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
 dim2_offset=int(round(PackArrPhase1Offset/SpatResol[2])) 
-IMGdata = np.roll(IMGdata,-dim2_offset,axis=(2))
+IMGdata = np.roll(IMGdata,-dim2_offset,axis=(3))
 
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]
 dim0start=int((dim[0]-dim[0]/crop[0])/2)
-dim2start=int((dim[2]-dim[2]/crop[1])/2)
+dim2start=int((dim[3]-dim[3]/crop[1])/2)
 dim0end = int(dim0start+dim[0]/crop[0])
-dim2end = int(dim2start+dim[2]/crop[1])
-IMGdata = IMGdata[dim0start:dim0end,:,dim2start:dim2end]
+dim2end = int(dim2start+dim[3]/crop[1])
+IMGdata = IMGdata[dim0start:dim0end,:,:,dim2start:dim2end]
 print('.', end='') #progress indicator
+
+# Simple Magnitude and Phase decoding
+# to recon magnitude images take the complex difference (+-)
+IMGdata_decoded_ABS = np.empty(shape=(dim[0],2,dim[2],dim[3]),dtype=np.float32)
+IMGdata_decoded_ABS [:,0,:,:] = np.abs(IMGdata [:,0,:,:] + IMGdata [:,1,:,:])
+IMGdata_decoded_ABS [:,1,:,:] = np.abs(IMGdata [:,0,:,:] - IMGdata [:,1,:,:])
+# to recon phase images take the complex division (*/)
+IMGdata_decoded_PH = np.empty(shape=(dim[0],1,dim[2],dim[3]),dtype=np.float32)
+IMGdata_decoded_PH [:,0,:,:] = -1.0*np.angle(IMGdata [:,0,:,:] / IMGdata [:,1,:,:])
 
 #permute dimensions
 #worx for PVM_SPackArrSliceOrient=axial
@@ -284,7 +281,8 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial":
     SpatResol_perm[0]=SpatResol[0]
     SpatResol_perm[1]=SpatResol[2]
     SpatResol_perm[2]=SpatResol[1]
-    IMGdata = np.transpose (IMGdata, axes=(0,2,1))
+    IMGdata_decoded_ABS = np.transpose (IMGdata_decoded_ABS, axes=(0,1,3,2))
+    IMGdata_decoded_PH  = np.transpose (IMGdata_decoded_PH,  axes=(0,1,3,2))    
     temp=SpatResol_perm[0]
     SpatResol_perm[0]=SpatResol_perm[1]
     SpatResol_perm[1]=temp
@@ -292,39 +290,27 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         temp=SpatResol_perm[0]
         SpatResol_perm[0]=SpatResol_perm[1]
         SpatResol_perm[1]=temp
-        IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (axial A_P)
-    elif METHODdata["PVM_SPackArrReadOrient"] == "L_R":
-        IMGdata = IMGdata[::-1,:,:] # flip axis (axial L_R)
+        IMGdata_decoded_ABS = np.rot90(IMGdata_decoded_ABS, k=1, axes=(0,2)) # rotate (axial H_F)
+        IMGdata_decoded_PH  = np.rot90(IMGdata_decoded_PH,  k=1, axes=(0,2)) # rotate (axial H_F)        
+    elif METHODdata["PVM_SPackArrReadOrient"] == "L_R":   
+        IMGdata_decoded_ABS = IMGdata_decoded_ABS[::-1,:,:,:] # flip axis (axial L_R)
+        IMGdata_decoded_PH  = IMGdata_decoded_PH [::-1,:,:,:] # flip axis (axial L_R)        
     else:
-        SpatResol_perm=SpatResol    
-        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
-                METHODdata["PVM_SPackArrReadOrient"]);
+        SpatResol_perm = SpatResol
+        print ('Warning: unknown Readout Orientation',METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
-elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
-    if METHODdata["PVM_SPackArrReadOrient"] == "A_P":
-        SpatResol_perm = np.empty(shape=(3))
-        SpatResol_perm[0]=SpatResol[0]
-        SpatResol_perm[1]=SpatResol[2]
-        SpatResol_perm[2]=SpatResol[1]    
-        IMGdata = np.transpose (IMGdata, axes=(0,2,1))
-        IMGdata = IMGdata[::-1,:,:] # flip axis
-    else:
-        SpatResol_perm=SpatResol
-        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
-                METHODdata["PVM_SPackArrReadOrient"]);
-        print ('         resulting images may be rotated incorrectly');    
 else:
-    SpatResol_perm=SpatResol
-    print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
-            METHODdata["PVM_SPackArrReadOrient"]);
+    SpatResol_perm = SpatResol
+    print ('Warning: unknown Slice Orientation',METHODdata["PVM_SPackArrReadOrient"]);
     print ('         resulting images may be rotated incorrectly'); 
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-steps=int(n_points/1000); start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
+image_number = 0 # 0 is static, 1 is flow
+n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
+steps=int(n_points/1000); start=1; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
 xbins =  np.linspace(start,fin,steps)
-ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
+ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
 ybins = smooth(ybins,steps/20)
 #--- old code find minimum ---
@@ -341,46 +327,66 @@ while i<len(ybins):
     i+=1
     if ybins[i]<np.max(ybins)/2: 
         threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
-        i=len(ybins);        
-mask =  abs(IMGdata [:,:,:]) > threshold  
+        i=len(ybins);   
+mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold  
 #enable the following view histogram plot
 #print ('\nThreshold = %.2e' % threshold)
-#import pylab; pylab.plot(xbins,ybins, linewidth=1.5); pylab.draw();
+#import pylab; pylab.plot(xbins,ybins, linewidth=1.2); pylab.draw();
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
 #transform to int
-IMGdata_ABS = np.abs(IMGdata); 
-max_= np.amax(IMGdata_ABS);
-IMGdata_ABS *= 32767./max_
-IMGdata_ABS = IMGdata_ABS.astype(np.int16)
+max_= np.amax(IMGdata_decoded_ABS);
+IMGdata_decoded_ABS *= 32767./max_
+IMGdata_decoded_ABS = IMGdata_decoded_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-#IMGdata_PH  = np.angle(IMGdata)
-IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
-max_= np.pi; 
-IMGdata_PH *= 32767./max_
-IMGdata_PH = IMGdata_PH.astype(np.int16)
+IMGdata_decoded_PH[:,0,:,:] *= mask*32767./np.pi
+IMGdata_decoded_PH = IMGdata_decoded_PH.astype(np.int16)
 print('.', end='') #progress indicator
 
 #save NIFTI
+venc=METHODdata["FlowRange"]
 aff = np.eye(4)
-aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
-NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
-NIFTIimg_ABS.header['sform_code']=1
-NIFTIimg_ABS.header['qform_code']=1
-NIFTIimg_ABS.header.set_slope_inter(1,0)
-NIFTIimg_PH.header.set_slope_inter(np.pi/32767.,0)
-#write
-try:
-    print('.', end='') #progress indicator
-    nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
-    print('.', end='') #progress indicator
-    nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
-except:
-    print ('\nERROR:  problem while writing results'); sys.exit(1)
+aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_decoded_ABS.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_decoded_ABS.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[2]/2)*aff[2,2]
+NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
+NIFTIimg.header['sform_code']=1
+NIFTIimg.header['qform_code']=1
+NIFTIimg.header.set_slope_inter(1,0)
+try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT0.nii.gz'))
+except: print ('\nERROR:  problem while writing results'); sys.exit(1)
+print('.', end='') #progress indicator
+NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,1,:,:], aff)
+NIFTIimg.header['sform_code']=1
+NIFTIimg.header['qform_code']=1
+NIFTIimg.header.set_slope_inter(1,0)
+try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT1.nii.gz'))
+except: print ('\nERROR:  problem while writing results'); sys.exit(1)
+print('.', end='') #progress indicator
+NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,0,:,:], aff)
+NIFTIimg.header['sform_code']=1
+NIFTIimg.header['qform_code']=1
+NIFTIimg.header.set_slope_inter(venc/32767.,0)
+try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
+except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
+
+#write flowvolume results
+if METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArrReadOrient"] == "L_R":
+    with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Flow Volumes per slice (X):\n")
+        for i in range(0,IMGdata_decoded_PH.shape[3]): # in our data shape[2] is the main flow direction
+            flowvol = np.sum(IMGdata_decoded_PH[:,0,:,i])
+            flowvol *= 10.*venc/32767. # venc is in cm/s, multiply by 10. to get this in mm/s
+            flowvol *= SpatResol_perm[0]*SpatResol_perm[1] # multiply with inplane spatial resolution, result is in mm^3/s
+            flowvol /= 1000. # convert mm^3/s ---> ml/s
+            text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
+        text_file.write("\n")        
+else:
+    try: os.remove (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'))
+    except: pass #silent
+    print ('Warning: textfile with flow values not written (unknown Orientation)');   
+#end
 
 #end
 if sys.platform=="win32": os.system("pause") # windows

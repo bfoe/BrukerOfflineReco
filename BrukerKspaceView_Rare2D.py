@@ -26,18 +26,18 @@ import pylab as pl
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
 except: 
-	try: from tkinter.filedialog import askopenfilename; # Python3
-	except: TK_installed=False
+    try: from tkinter.filedialog import askopenfilename; # Python3
+    except: TK_installed=False
 try: import Tkinter as tk; # Python2
 except: 
-	try: import tkinter as tk; # Python3
-	except: TK_installed=False
+    try: import tkinter as tk; # Python3
+    except: TK_installed=False
 if not TK_installed:
-	print ('ERROR: tkinter not installed')
-	print ('       on Linux try "yum install tkinter"')
-	print ('       on MacOS install ActiveTcl from:')
-	print ('       http://www.activestate.com/activetcl/downloads')
-	sys.exit(2)
+    print ('ERROR: tkinter not installed')
+    print ('       on Linux try "yum install tkinter"')
+    print ('       on MacOS install ActiveTcl from:')
+    print ('       http://www.activestate.com/activetcl/downloads')
+    sys.exit(2)
 
 def ReadParamFile(filepath):
     global OrigFilename;
@@ -50,10 +50,10 @@ def ReadParamFile(filepath):
                 break
             # when line contains parameter
             if line.startswith('$$ /'):
-			    OrigFilename = line[line.find('/nmr/')+5:]
-			    OrigFilename = OrigFilename[0:len(OrigFilename)-8]
-			    OrigFilename = OrigFilename.replace(".", "_")
-			    OrigFilename = OrigFilename.replace("/", "_")
+                OrigFilename = line[line.find('/nmr/')+5:]
+                OrigFilename = OrigFilename[0:len(OrigFilename)-8]
+                OrigFilename = OrigFilename.replace(".", "_")
+                OrigFilename = OrigFilename.replace("/", "_")
             if line.startswith('##$'):
                 (param_name, current_line) = line[3:].split('=') # split at "="
                 # if current entry (current_line) is arraysize
@@ -73,7 +73,7 @@ def ReadParamFile(filepath):
                 # save parsed value to dict
                 param_dict[param_name] = value
     return param_dict
-	
+    
 def ParseArray(current_file, line):
     # extract the arraysize and convert it to numpy
     line = line[1:-2].replace(" ", "").split(",")
@@ -109,9 +109,9 @@ def ParseSingleValue(val):
         except ValueError:
             # if not, should  be string. Remove  newline character.
             result = val.rstrip('\n')
-    return result	
-	
-	
+    return result   
+    
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -120,7 +120,7 @@ if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')
 python_version = str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
 # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
 if sys.platform=="win32": os.system("title "+Program_name)
-	
+    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
 TKwindows.update()
@@ -134,7 +134,7 @@ except: pass
 try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
 except: pass
 TKwindows.update()
-	
+    
 #intercatively choose input FID file
 FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files","fid")])
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
@@ -152,16 +152,16 @@ METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
 if METHODdata["Method"] != "RARE" or METHODdata["PVM_SpatDimEnum"] != "2D":
-	print ('ERROR: Recon only implemented for RARE 2D method'); sys.exit(1)
+    print ('ERROR: Recon only implemented for RARE 2D method'); sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
-	print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
 if METHODdata["PVM_NRepetitions"] != 1:
-	print ('ERROR: Recon only implemented 1 repetition'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 repetition'); sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
    METHODdata["PVM_EncZfAccel1"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-	print ('ERROR: Recon for parallel acquisition not implemented'); 
-	sys.exit(1)
+    print ('ERROR: Recon for parallel acquisition not implemented'); 
+    sys.exit(1)
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
@@ -176,7 +176,7 @@ dim = FIDrawdata_CPX.shape
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-order1=METHODdata["PVM_EncSteps1"]+dim[2]/2 							
+order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
 for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
@@ -184,7 +184,7 @@ for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
 FIDdata_tmp = 0 #free memory  
 FIDrawdata_CPX =  FIDdata
 FIDdata = 0 #free memory
-	
+    
 #view k-space
 dim = FIDrawdata_CPX.shape
 # show the resulting images
@@ -196,5 +196,5 @@ pl.imshow(abs(FIDrawdata_CPX[:,dim[1]/2,:]))
 pl.subplot(133)
 pl.imshow(abs(FIDrawdata_CPX[dim[0]/2,:,:]))
 pl.show()
-	
-	
+    
+    
