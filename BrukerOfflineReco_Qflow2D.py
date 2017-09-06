@@ -136,6 +136,14 @@ def smooth(x,window_len):
     y=np.convolve(w/w.sum(),s,mode='same')
     return y[window_len:-window_len+1]  
     
+def is_powerof_2(n):
+    return bool(n and not (n&(n-1)))    
+def next_powerof_2(n):
+    list = [1 << i for i in range(17)]  # 1..65536
+    i=0
+    while n>list[i]: i += 1
+    return (list[i])
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -197,8 +205,11 @@ print ('Starting recon')
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
 dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],2,dim[1],dim[2], order="F")
+dim0=next_powerof_2(dim[0])
+if dim[0]<128: dim0=128
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,2,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]
 
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)
