@@ -367,7 +367,7 @@ else:
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-image_number = 0 # 0 is static, 4 is flow
+image_number = 4 # 0 is static, 4 is flow
 n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
 steps=int(n_points/1000); start=1; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
 xbins =  np.linspace(start,fin,steps)
@@ -411,9 +411,9 @@ print('.', end='') #progress indicator
 #createNIFTI's
 venc=METHODdata["FlowRange"]
 aff = np.eye(4)
-aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[2]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[3]/2)*aff[2,2]
+aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_decoded_ABS.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_decoded_ABS.shape[2]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[3]/2)*aff[2,2]
 #write Magnitude static
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
 NIFTIimg.header['sform_code']=1
