@@ -234,15 +234,35 @@ EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
-IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(1))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=1); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(1))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+Memory_OK=True
+try: dummy=np.empty(IMGdata.shape, dtype=np.complex64); dummy=0 # try to allocate more memory
+except: Memory_OK=False
+if Memory_OK:
+    IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(1))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=1); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
+    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(1))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+else:
+    for k in range(0,IMGdata.shape[1]):
+        if k%30==0: print(',', end='') #progress indicator
+        IMGdata[:,k,:] = np.roll(IMGdata[:,k,:], -EchoPosition, axis=(0))
+        IMGdata[:,k,:] = np.fft.fft(IMGdata[:,k,:], axis=(0))
+        IMGdata[:,k,:] = np.fft.fftshift(IMGdata[:,k,:], axes=(0))
+    for i in range(0,IMGdata.shape[0]):
+        if i%30==0: print(',', end='') #progress indicator
+        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(0))
+        IMGdata[i,:,:] = np.fft.fft(IMGdata[i,:,:], axis=(0))
+        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(0))
+    for i in range(0,IMGdata.shape[0]):
+        if i%30==0: print(',', end='') #progress indicator
+        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(1))
+        IMGdata[i,:,:] = np.fft.fft(IMGdata[i,:,:], axis=(1))
+        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(1))       
 print('.', end='') #progress indicator
 
 #take Phase Offsets into account
@@ -257,8 +277,13 @@ SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
 SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
 dim1_offset=int(round(PackArrPhase1Offset/SpatResol[1])) 
 dim2_offset=-int(round(SPackArrSliceOffset/SpatResol[2]))
-IMGdata = np.roll(IMGdata,-dim1_offset,axis=(1))
-IMGdata = np.roll(IMGdata,-dim2_offset,axis=(2))
+if Memory_OK:
+    IMGdata = np.roll(IMGdata,-dim1_offset,axis=(1))
+    IMGdata = np.roll(IMGdata,-dim2_offset,axis=(2))
+else:
+    for i in range(0,IMGdata.shape[0]):
+        IMGdata[i,:,:] = np.roll(IMGdata[i,:,:],-dim1_offset,axis=(0))
+        IMGdata[i,:,:] = np.roll(IMGdata[i,:,:],-dim2_offset,axis=(1))    
 
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]
@@ -306,7 +331,7 @@ print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
 n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-steps=int(n_points/1000); start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
+steps=int(n_points/1000); start=1; fin=np.max(np.abs(IMGdata[:,:,:]))   
 xbins =  np.linspace(start,fin,steps)
 ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0

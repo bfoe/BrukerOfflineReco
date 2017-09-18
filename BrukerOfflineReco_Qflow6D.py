@@ -250,16 +250,36 @@ EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
-FIDdata = 0 #free memory 
-IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=3); print('.', end='') #progress indicator
-IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-IMGdata = np.fft.fftshift(IMGdata, axes=(3))
+FIDdata = 0 #free memory
+Memory_OK=True
+try: dummy=np.empty(IMGdata.shape, dtype=np.complex64); dummy=0 # try to allocate more memory
+except: Memory_OK=False
+if Memory_OK:
+    IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
+    IMGdata = np.fft.fft(IMGdata, axis=3); print('.', end='') #progress indicator
+    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(3))
+else: # for large datasets use loops
+    for k in range(0,IMGdata.shape[2]):
+        if k%30==0: print(',', end='') #progress indicator
+        IMGdata[:,:,k,:] = np.roll(IMGdata[:,:,k,:], -EchoPosition, axis=(0))
+        IMGdata[:,:,k,:] = np.fft.fft(IMGdata[:,:,k,:], axis=(0))
+        IMGdata[:,:,k,:] = np.fft.fftshift(IMGdata[:,:,k,:], axes=(0))
+    for i in range(0,IMGdata.shape[0]):
+        if i%30==0: print(',', end='') #progress indicator
+        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(1))
+        IMGdata[i,:,:,:] = np.fft.fft(IMGdata[i,:,:,:], axis=(1))
+        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(1))
+    for i in range(0,IMGdata.shape[0]):
+        if i%30==0: print(',', end='') #progress indicator
+        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(2))
+        IMGdata[i,:,:,:] = np.fft.fft(IMGdata[i,:,:,:], axis=(2))
+        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(2))   
 print('.', end='') #progress indicator
 
 #take Phase Offsets into account
@@ -274,9 +294,14 @@ SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
 SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
 dim1_offset=int(round(PackArrPhase1Offset/SpatResol[0])) 
 dim2_offset=-int(round(SPackArrSliceOffset/SpatResol[2]))
-IMGdata = np.roll(IMGdata,-dim1_offset,axis=(2))
-IMGdata = np.roll(IMGdata,-dim2_offset,axis=(3))
-
+if Memory_OK:
+    IMGdata = np.roll(IMGdata,-dim1_offset,axis=(2))
+    IMGdata = np.roll(IMGdata,-dim2_offset,axis=(3))
+else: # for large datasets use loops
+    for i in range(0,IMGdata.shape[0]):
+        IMGdata[i,:,:,:] = np.roll(IMGdata[i,:,:,:],-dim1_offset,axis=(1))
+        IMGdata[i,:,:,:] = np.roll(IMGdata[i,:,:,:],-dim2_offset,axis=(2))    
+        
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]
 dim0start=int((dim[0]-dim[0]/crop[0])/2)
@@ -367,7 +392,7 @@ else:
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-image_number = 4 # 0 is static, 4 is flow
+image_number = 0 # 0 is static, 4 is flow
 n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
 steps=int(n_points/1000); start=1; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
 xbins =  np.linspace(start,fin,steps)
