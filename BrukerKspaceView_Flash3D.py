@@ -188,7 +188,7 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 # show the resulting images
 pl.figure()
 pl.subplot(131)
-pl.imshow(abs(FIDrawdata_CPX[:,:,dim[0]/2]))
+pl.imshow(abs(FIDrawdata_CPX[:,:,dim[2]/2]))
 pl.subplot(132)
 pl.imshow(abs(FIDrawdata_CPX[:,dim[1]/2,:]))
 pl.subplot(133)
