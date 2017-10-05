@@ -35,6 +35,8 @@
 #
 
 from __future__ import print_function
+try: import win32gui, win32console
+except: pass #silent
 import sys
 import os
 import numpy as np
@@ -172,6 +174,8 @@ FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
 FIDfile = os.path.abspath(FIDfile) 
 TKwindows.update()
+try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+except: pass #silent
 
 #read FID 
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -198,6 +202,13 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
 
+# read input from keyboard
+cor=0; OK=False
+while not OK:
+    dummy = raw_input("Enter Flow correction[cm/s]: ")
+    if dummy == '': dummy=0
+    try: cor = float(dummy); OK=True
+    except: print ("Input Error")
 #start
 print ('Starting recon')    
 
@@ -274,6 +285,16 @@ dim0end = int(dim0start+dim[0]/crop[0])
 dim2end = int(dim2start+dim[3]/crop[1])
 IMGdata = IMGdata[dim0start:dim0end,:,:,dim2start:dim2end]
 print('.', end='') #progress indicator
+
+#Phase offset correction
+venc=METHODdata["FlowRange"]
+mag = np.abs(IMGdata [:,0,:,:]); ph = np.angle(IMGdata [:,0,:,:])
+ph += cor/venc*np.pi/2.
+IMGdata [:,0,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+mag = np.abs(IMGdata [:,1,:,:]); ph = np.angle(IMGdata [:,1,:,:])
+ph -= cor/venc*np.pi/2.
+IMGdata [:,1,:,:] = mag * np.exp(1j*ph)
 
 # Simple Magnitude and Phase decoding
 # to recon magnitude images take the complex difference (+-)
