@@ -35,11 +35,12 @@
 #
 
 from __future__ import print_function
+try: import win32gui, win32console
+except: pass #silent
 import sys
 import os
 import numpy as np
 import nibabel as nib
-
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -173,6 +174,8 @@ FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
 FIDfile = os.path.abspath(FIDfile) 
 TKwindows.update()
+try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+except: pass #silent
 
 #read FID 
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -204,6 +207,27 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or
    METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
+
+# read input from keyboard
+xcor=0; ycor=0; zcor=0
+OK=False
+while not OK:
+    dummy = raw_input("Enter Flow correction X [cm/s]: ")
+    if dummy == '': dummy=0
+    try: xcor = float(dummy); OK=True
+    except: print ("Input Error")
+OK=False
+while not OK:
+    dummy = raw_input("Enter Flow correction Y [cm/s]: ")
+    if dummy == '': dummy=0    
+    try: ycor = float(dummy); OK=True
+    except: print ("Input Error")
+OK=False
+while not OK:
+    dummy = raw_input("Enter Flow correction Z [cm/s]: ")
+    if dummy == '': dummy=0    
+    try: zcor = float(dummy); OK=True
+    except: print ("Input Error")
 
 #start
 print ('Starting recon')    
@@ -252,7 +276,7 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory
 Memory_OK=True
-try: dummy=np.empty(IMGdata.shape, dtype=np.complex64); dummy=0 # try to allocate more memory
+try: dummy=np.empty(IMGdata.shape, dtype=np.complex128); dummy=0 # try to allocate more memory
 except: Memory_OK=False
 if Memory_OK:
     IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
@@ -314,6 +338,25 @@ IMGdata = IMGdata[dim0start:dim0end,:,dim1start:dim1end,dim2start:dim2end]
 dim[0] /= int(crop[0])
 dim[1] /= int(crop[1])
 dim[2] /= int(crop[2])
+print('.', end='') #progress indicator
+
+#Phase offset correction
+venc=METHODdata["FlowRange"]
+mag = np.abs(IMGdata [:,0,:,:]); ph = np.angle(IMGdata [:,0,:,:])
+ph += -1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
+IMGdata [:,0,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+mag = np.abs(IMGdata [:,1,:,:]); ph = np.angle(IMGdata [:,1,:,:])
+ph += +1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
+IMGdata [:,1,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+mag = np.abs(IMGdata [:,2,:,:]); ph = np.angle(IMGdata [:,2,:,:])
+ph += +1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
+IMGdata [:,2,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+mag = np.abs(IMGdata [:,3,:,:]); ph = np.angle(IMGdata [:,3,:,:])
+ph += -1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
+IMGdata [:,3,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
 
@@ -392,7 +435,7 @@ else:
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-image_number = 0 # 0 is static, 4 is flow
+image_number = 4 # 0 is static, 4 is flow
 n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
 steps=int(n_points/1000); start=1; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
 xbins =  np.linspace(start,fin,steps)
