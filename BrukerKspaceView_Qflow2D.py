@@ -170,8 +170,11 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
 dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],2,dim[1],dim[2], order="F")
+dim0 = dim[0]; dim0_mod_128 = dim0%128
+if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,2,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]
 
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],2,dim[1],dim[2]),dtype=np.complex64)

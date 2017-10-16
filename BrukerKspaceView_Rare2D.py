@@ -152,14 +152,16 @@ METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
 if METHODdata["Method"] != "RARE" or METHODdata["PVM_SpatDimEnum"] != "2D":
-    print ('ERROR: Recon only implemented for RARE 2D method'); sys.exit(1)
+    print ('ERROR: Recon only implemented for RARE 2D method'); 
+    sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
-    print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 package'); 
+    sys.exit(1) 
 if METHODdata["PVM_NRepetitions"] != 1:
-    print ('ERROR: Recon only implemented 1 repetition'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 repetition'); 
+    sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or \
-   METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
+   METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
 
@@ -167,8 +169,11 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
 dim=[dim[0],METHODdata["PVM_RareFactor"],METHODdata["PVM_SPackArrNSlices"],int(dim[1]/METHODdata["PVM_RareFactor"])]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2],dim[3], order="F")
+dim0 = dim[0]; dim0_mod_128 = dim0%128
+if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2],dim[3], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]
 FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,3,1))
 FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[2],dim[3]*dim[1])
 dim = FIDrawdata_CPX.shape

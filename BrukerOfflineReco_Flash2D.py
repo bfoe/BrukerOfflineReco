@@ -35,6 +35,8 @@
 #
 
 from __future__ import print_function
+try: import win32gui, win32console
+except: pass #silent
 import sys
 import os
 import numpy as np
@@ -164,6 +166,8 @@ FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
 FIDfile = os.path.abspath(FIDfile) 
 TKwindows.update()
+try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+except: pass #silent
 
 #read FID 
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -195,21 +199,23 @@ print ('Starting recon')
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
+dim=METHODdata["PVM_EncMatrix"]
+dim0 = dim[0]; dim0_mod_128 = dim0%128
+if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
 if  METHODdata["Method"] == "FLASH":
-    dim=METHODdata["PVM_EncMatrix"]
-    dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
+    dim=[dim0,METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
+    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 elif METHODdata["Method"] == "FISP":
-    dim=METHODdata["PVM_EncMatrix"]
-    dim=[dim[0],dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
+    dim=[dim0,dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
+    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
     FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,1))
     dim = FIDrawdata_CPX.shape
 else:
     print ('Error: unknown method',METHODdata["Method"])
-    sys.exit(1)   
+    sys.exit(1)
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]    
 
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)

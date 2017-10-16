@@ -35,6 +35,8 @@
 #
 
 from __future__ import print_function
+try: import win32gui, win32console
+except: pass #silent
 import sys
 import os
 import numpy as np
@@ -164,6 +166,8 @@ FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
 FIDfile = os.path.abspath(FIDfile) 
 TKwindows.update()
+try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+except: pass #silent
 
 #read FID 
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -175,7 +179,7 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP") or METHODdata["PVM_SpatDimEnum"] != "3D":
+if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP" or METHODdata["Method"] =="GEFC") or METHODdata["PVM_SpatDimEnum"] != "3D":
     print ('ERROR: Recon only implemented for FLASH/FISP 3D method'); 
     sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
@@ -196,8 +200,11 @@ print ('Starting recon')
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
-try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim[0],dim[1],dim[2], order="F")
+dim0 = dim[0]; dim0_mod_128 = dim0%128
+if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
+try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]
 
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
@@ -235,7 +242,7 @@ EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
 Memory_OK=True
-try: dummy=np.empty(IMGdata.shape, dtype=np.complex64); dummy=0 # try to allocate more memory
+try: dummy=np.empty(IMGdata.shape, dtype=np.complex128); dummy=0 # try to allocate more memory
 except: Memory_OK=False
 if Memory_OK:
     IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
