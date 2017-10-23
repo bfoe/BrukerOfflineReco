@@ -253,7 +253,35 @@ FIDdata_tmp = 0 #free memory
 print('.', end='') #progress indicator
 
 #Hanning filter
-#to do
+percentage = 5.
+npoints_x = int(float(dim[0])*percentage/100.)
+hanning_x = np.empty(shape=(dim[0]),dtype=np.float32)
+x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+hanning_x [0:npoints_x] = np.power(np.sin(x_),2)
+hanning_x [npoints_x:hanning_x.shape[0]-npoints_x] = 1
+x_ = x_[::-1] # reverse x_
+hanning_x [hanning_x.shape[0]-npoints_x:hanning_x.shape[0]] = np.power(np.sin(x_),2)
+#print (hanning_x)
+FIDdata[:,:,:] *= hanning_x [:,None,None,None]
+npoints_y = int(float(dim[1])*percentage/100.)
+hanning_y = np.empty(shape=(dim[1]),dtype=np.float32)
+y_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
+hanning_y [0:npoints_y] = np.power(np.sin(y_),2)
+hanning_y [npoints_y:hanning_y.shape[0]-npoints_y] = 1
+y_ = y_[::-1] # reverse y_
+hanning_y [hanning_y.shape[0]-npoints_y:hanning_y.shape[0]] = np.power(np.sin(y_),2)
+#print (hanning_x)
+FIDdata[:,:,:] *= hanning_y [None,None,:,None]
+npoints_z = int(float(dim[2])*percentage/100.)
+hanning_z = np.empty(shape=(dim[2]),dtype=np.float32)
+z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+hanning_z [0:npoints_z] = np.power(np.sin(z_),2)
+hanning_z [npoints_z:hanning_z.shape[0]-npoints_z] = 1
+z_ = z_[::-1] # reverse z_
+hanning_z [hanning_z.shape[0]-npoints_z:hanning_z.shape[0]] = np.power(np.sin(z_),2)
+#print (hanning_x)
+FIDdata[:,:,:] *= hanning_z [None,None,None,:]
+print('.', end='') #progress indicator
 
 # apply FOV offsets = (linear phase in k-space)
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
