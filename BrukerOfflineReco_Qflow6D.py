@@ -255,6 +255,18 @@ print('.', end='') #progress indicator
 #Hanning filter
 #to do
 
+# apply FOV offsets = (linear phase in k-space)
+PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
+SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
+realFOV = METHODdata["PVM_Fov"]*METHODdata["PVM_AntiAlias"]
+phase_step1 = +2.*np.pi*float(PackArrPhase1Offset)/float(realFOV[1])
+phase_step2 = -2.*np.pi*float(SPackArrSliceOffset)/float(realFOV[2])
+mag = np.abs(FIDdata[:,:,:,:]); ph = np.angle(FIDdata[:,:,:,:])
+for i in range(0,FIDdata.shape[2]): ph[:,:,i,:] -= float(i-int(FIDdata.shape[2]/2))*phase_step1
+for j in range(0,FIDdata.shape[3]): ph[:,:,:,j] -= float(j-int(FIDdata.shape[3]/2))*phase_step2
+FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+
 #zero fill
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
@@ -305,26 +317,6 @@ else: # for large datasets use loops
         IMGdata[i,:,:,:] = np.fft.fft(IMGdata[i,:,:,:], axis=(2))
         IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(2))   
 print('.', end='') #progress indicator
-
-#take Phase Offsets into account
-#
-# this is a rough adjust with 1 pixel precision
-# more correct would be to add a linear phase offset in k-space
-# which permits sub-pixel precision
-#
-PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
-PackArrPhase2Offset=METHODdata["PVM_SPackArrPhase2Offset"]
-SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
-SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
-dim1_offset=int(round(PackArrPhase1Offset/SpatResol[0])) 
-dim2_offset=-int(round(SPackArrSliceOffset/SpatResol[2]))
-if Memory_OK:
-    IMGdata = np.roll(IMGdata,-dim1_offset,axis=(2))
-    IMGdata = np.roll(IMGdata,-dim2_offset,axis=(3))
-else: # for large datasets use loops
-    for i in range(0,IMGdata.shape[0]):
-        IMGdata[i,:,:,:] = np.roll(IMGdata[i,:,:,:],-dim1_offset,axis=(1))
-        IMGdata[i,:,:,:] = np.roll(IMGdata[i,:,:,:],-dim2_offset,axis=(2))    
         
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]

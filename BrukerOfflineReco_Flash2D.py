@@ -232,6 +232,15 @@ print('.', end='') #progress indicator
 #Hanning filter
 #to do
 
+# apply FOV offsets = (linear phase in k-space)
+PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
+realFOV = METHODdata["PVM_Fov"]*METHODdata["PVM_AntiAlias"]
+phase_step1 = +2.*np.pi*float(PackArrPhase1Offset)/float(realFOV[1])
+mag = np.abs(FIDdata[:,:,:]); ph = np.angle(FIDdata[:,:,:])
+for i in range(0,FIDdata.shape[2]): ph[:,:,i] -= float(i-int(FIDdata.shape[2]/2))*phase_step1
+FIDdata [:,:,:] = mag * np.exp(1j*ph)
+print('.', end='') #progress indicator
+
 #zero fill
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
@@ -260,18 +269,6 @@ IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
 IMGdata = np.fft.fftshift(IMGdata, axes=(0))
 IMGdata = np.fft.fftshift(IMGdata, axes=(2))
 print('.', end='') #progress indicator
-
-#take Phase Offsets into account
-#
-# this is a rough adjust with 1 pixel precision
-# more correct would be to add a linear phase offset in k-space
-# which permits sub-pixel precision
-#
-PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
-SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
-SPackArrReadOffset=METHODdata["PVM_SPackArrReadOffset"]
-dim2_offset=int(round(PackArrPhase1Offset/SpatResol[2])) 
-IMGdata = np.roll(IMGdata,-dim2_offset,axis=(2))
 
 #throw out antialiasing
 crop=METHODdata["PVM_AntiAlias"]
