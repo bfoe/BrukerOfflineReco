@@ -457,7 +457,7 @@ print('.', end='') #progress indicator
 #find noise mask threshold from histogram
 image_number = 4 # 0 is static, 4 is flow
 n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
-steps=int(n_points/1000); start=1; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
+steps=int(n_points/1000); start=0; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
 xbins =  np.linspace(start,fin,steps)
 ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0

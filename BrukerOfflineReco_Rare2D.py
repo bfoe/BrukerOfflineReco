@@ -216,7 +216,10 @@ order1=METHODdata["PVM_EncSteps1"]+dim[2]/2
 for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
-for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+if dim[1]>1: # more than one slice
+   for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+else: # only one slice
+   FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
 
@@ -266,7 +269,9 @@ print('.', end='') #progress indicator
 #zero fill
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
-SpatResol=[SpatResol[0],METHODdata["PVM_SPackArrSliceDistance"],SpatResol[1]]# insert slice dimension
+res1=METHODdata["PVM_SPackArrSliceDistance"]
+if dim[1]<=1: res1=METHODdata["PVM_SliceThick"] # only one slice
+SpatResol=[SpatResol[0],res1,SpatResol[1]]# insert slice dimension
 FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),dim[1],
                              int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
@@ -341,7 +346,7 @@ print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
 n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-steps=int(n_points/1000); start=1; fin=np.max(np.abs(IMGdata[:,:,:]))
+steps=int(n_points/1000); start=0; fin=np.max(np.abs(IMGdata[:,:,:]))
 xbins =  np.linspace(start,fin,steps)
 ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
