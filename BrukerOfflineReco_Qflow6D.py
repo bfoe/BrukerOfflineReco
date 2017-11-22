@@ -579,7 +579,7 @@ aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[3]/2)*
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
 NIFTIimg.header['sform_code']=1
 NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(1,0)
+NIFTIimg.header.set_slope_inter(max_ABS/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Static.nii.gz'))
 except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
@@ -587,7 +587,7 @@ print('.', end='') #progress indicator
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,4,:,:], aff)
 NIFTIimg.header['sform_code']=1
 NIFTIimg.header['qform_code']=1
-NIFTIimg.header.set_slope_inter(1,0)
+NIFTIimg.header.set_slope_inter(max_ABS/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Flow.nii.gz'))
 except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
