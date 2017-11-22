@@ -37,6 +37,7 @@
 from __future__ import print_function
 try: import win32gui, win32console
 except: pass #silent
+from math import ceil, floor
 import sys
 import os
 import numpy as np
@@ -173,6 +174,10 @@ except: pass #silent
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
+
+#read acqp file
+ACQPfile=os.path.dirname(FIDfile)+slash+'acqp'
+ACQPdata=ReadParamFile(ACQPfile)
 
 #read method file
 METHODfile=os.path.dirname(FIDfile)+slash+'method'
@@ -347,12 +352,12 @@ else:
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-steps=int(n_points/1000); start=0; fin=np.max(np.abs(IMGdata[:,:,:]))
-xbins =  np.linspace(start,fin,steps)
-ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
-ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
-ybins = smooth(ybins,steps/20)
+#n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
+#steps=int(n_points/1000); start=0; fin=np.max(np.abs(IMGdata[:,:,:]))
+#xbins =  np.linspace(start,fin,steps)
+#ybins, binedges = np.histogram(np.abs(IMGdata[:,:,:]), bins=xbins)
+#ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
+#ybins = smooth(ybins,steps/20)
 #--- old code find minimum ---
 #start=ybins.argmax()
 #i=start;minx=0;miny=ybins[start]
@@ -362,28 +367,93 @@ ybins = smooth(ybins,steps/20)
 #    else: i=len(ybins);
 #threshold=xbins[minx]
 #--- new code find FWHM ---
-start=ybins.argmax(); i=start
-while i<len(ybins):
-    i+=1
-    if ybins[i]<np.max(ybins)/2: 
-        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
-        i=len(ybins);        
-mask =  abs(IMGdata [:,:,:]) > threshold  
+#start=ybins.argmax(); i=start
+#while i<len(ybins):
+#    i+=1
+#    if ybins[i]<np.max(ybins)/2: 
+#        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
+#        i=len(ybins);        
+#mask =  abs(IMGdata [:,:,:]) > threshold  
 #enable the following view histogram plot
 #print ('\nThreshold = %.2e' % threshold)
 #import pylab; pylab.plot(xbins,ybins, linewidth=1.5); pylab.draw();
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
+# use noise in all 8 corners to establish threshold
+N=10 # use 10% at the corners of the FOV
+tresh=np.empty(shape=8,dtype=np.float)
+avg=np.empty(shape=8,dtype=np.float)
+std=np.empty(shape=8,dtype=np.float)
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[0]=np.mean(arr)
+std[0]=np.std(arr)
+tresh[0]=avg[0] + 4*std[0]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[1]=np.mean(arr)
+std[1]=np.std(arr)
+tresh[1]=avg[1] + 4*std[1]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[2]=np.mean(arr)
+std[2]=np.std(arr)
+tresh[2]=avg[2] + 4*std[2]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[3]=np.mean(arr)
+std[3]=np.std(arr)
+tresh[3]=avg[3] + 4*std[3]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[4]=np.mean(arr)
+std[4]=np.std(arr)
+tresh[4]=avg[4] + 4*std[4]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[5]=np.mean(arr)
+std[5]=np.std(arr)
+tresh[5]=avg[5] + 4*std[5]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[6]=np.mean(arr)
+std[6]=np.std(arr)
+tresh[6]=avg[6] + 4*std[6]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[7]=np.mean(arr)
+std[7]=np.std(arr)
+tresh[7]=avg[7] + 4*std[7]
+threshold=np.min(tresh)
+mask =  abs(IMGdata [:,:,:]) > threshold
+
 #transform to int
-IMGdata_ABS = np.abs(IMGdata); 
-max_= np.amax(IMGdata_ABS);
-IMGdata_ABS *= 32767./max_
+ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
+IMGdata_ABS = np.abs(IMGdata)/ReceiverGain; 
+max_ABS = np.amax(IMGdata_ABS);
+IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
 #IMGdata_PH  = np.angle(IMGdata)
 IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
-max_= np.pi; 
-IMGdata_PH *= 32767./max_
+max_PH = np.pi; 
+IMGdata_PH *= 32767./max_PH
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
 
@@ -393,15 +463,19 @@ aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
 aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
+NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
 NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
 NIFTIimg_ABS.header['sform_code']=1
 NIFTIimg_ABS.header['qform_code']=1
-NIFTIimg_ABS.header.set_slope_inter(1,0)
-NIFTIimg_PH.header.set_slope_inter(np.pi/32767.,0)
+NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
 #write
 try:
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
+    print('.', end='') #progress indicator
+    nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz'))    
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
 except:

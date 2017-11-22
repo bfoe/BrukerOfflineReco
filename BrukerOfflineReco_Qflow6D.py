@@ -182,6 +182,10 @@ with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32)
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
+#read acqp file
+ACQPfile=os.path.dirname(FIDfile)+slash+'acqp'
+ACQPdata=ReadParamFile(ACQPfile)
+
 #read method file
 METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
@@ -455,13 +459,13 @@ else:
 print('.', end='') #progress indicator
 
 #find noise mask threshold from histogram
-image_number = 4 # 0 is static, 4 is flow
-n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
-steps=int(n_points/1000); start=0; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
-xbins =  np.linspace(start,fin,steps)
-ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
-ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
-ybins = smooth(ybins,steps/20)
+#image_number = 4 # 0 is static, 4 is flow
+#n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
+#steps=int(n_points/1000); start=0; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
+#xbins =  np.linspace(start,fin,steps)
+#ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
+#ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
+#ybins = smooth(ybins,steps/20)
 #--- old code find minimum ---
 #start=ybins.argmax()
 #i=start;minx=0;miny=ybins[start]
@@ -471,21 +475,90 @@ ybins = smooth(ybins,steps/20)
 #    else: i=len(ybins);
 #threshold=xbins[minx]
 #--- new code find FWHM ---
-start=ybins.argmax(); i=start
-while i<len(ybins):
-    i+=1
-    if ybins[i]<np.max(ybins)/2: 
-        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
-        i=len(ybins);   
-mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold  
+#start=ybins.argmax(); i=start
+#while i<len(ybins):
+#    i+=1
+#    if ybins[i]<np.max(ybins)/2: 
+#        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
+#        i=len(ybins);   
+#mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold  
 #enable the following view histogram plot
 #print ('\nThreshold = %.2e' % threshold)
 #import pylab; pylab.plot(xbins,ybins, linewidth=1.2); pylab.draw();
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
+# use noise in all 8 corners to establish threshold
+image_number = 4 # 0 is static, 4 is flow
+N=10 # use 10% at the corners of the FOV
+std_fac = 6 # how many standard deviations to add
+tresh=np.empty(shape=8,dtype=np.float)
+avg=np.empty(shape=8,dtype=np.float)
+std=np.empty(shape=8,dtype=np.float)
+xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
+ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
+zstart=0; zend=int(IMGdata_decoded_ABS.shape[3]/N)
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[0]=np.mean(arr)
+std[0]=np.std(arr)
+tresh[0]=avg[0] + std_fac*std[0]
+xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
+ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
+zstart=0; zend=int(IMGdata_decoded_ABS.shape[3]/N)
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[1]=np.mean(arr)
+std[1]=np.std(arr)
+tresh[1]=avg[1] + std_fac*std[1]
+xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
+ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
+zstart=0; zend=int(IMGdata_decoded_ABS.shape[3]/N)
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[2]=np.mean(arr)
+std[2]=np.std(arr)
+tresh[2]=avg[2] + std_fac*std[2]
+xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
+ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
+zstart=0; zend=int(IMGdata_decoded_ABS.shape[3]/N)
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[3]=np.mean(arr)
+std[3]=np.std(arr)
+tresh[3]=avg[3] + std_fac*std[3]
+xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
+ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
+zstart=int(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[2]/N); zend=IMGdata_decoded_ABS.shape[3]
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[4]=np.mean(arr)
+std[4]=np.std(arr)
+tresh[4]=avg[4] + std_fac*std[4]
+xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
+ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
+zstart=int(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N); zend=IMGdata_decoded_ABS.shape[3]
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[5]=np.mean(arr)
+std[5]=np.std(arr)
+tresh[5]=avg[5] + std_fac*std[5]
+xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
+ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
+zstart=int(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N); zend=IMGdata_decoded_ABS.shape[3]
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[6]=np.mean(arr)
+std[6]=np.std(arr)
+tresh[6]=avg[6] + std_fac*std[6]
+xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
+ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
+zstart=int(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N); zend=IMGdata_decoded_ABS.shape[3]
+arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
+avg[7]=np.mean(arr)
+std[7]=np.std(arr)
+tresh[7]=avg[7] + std_fac*std[7]
+threshold=np.min(tresh)
+mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold
+
+
 #transform to int
-max_= np.amax(IMGdata_decoded_ABS);
-IMGdata_decoded_ABS *= 32767./max_
+ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
+IMGdata_decoded_ABS /= ReceiverGain; 
+max_ABS = np.amax(IMGdata_decoded_ABS);
+IMGdata_decoded_ABS *= 32767./max_ABS
 IMGdata_decoded_ABS = IMGdata_decoded_ABS.astype(np.int16)
 print('.', end='') #progress indicator
 IMGdata_decoded_PH [:,0,:,:] *= mask*32767./np.pi
