@@ -151,16 +151,20 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "FLASH" or METHODdata["PVM_SpatDimEnum"] != "3D":
-    print ('ERROR: Recon only implemented for FLASH 3D method'); sys.exit(1)
+if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP" or METHODdata["Method"] =="GEFC") or METHODdata["PVM_SpatDimEnum"] != "3D":
+    print ('ERROR: Recon only implemented for FLASH/FISP 3D method'); 
+    sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
-    print ('ERROR: Recon only implemented 1 package'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 package'); 
+    sys.exit(1)
 if METHODdata["PVM_NRepetitions"] != 1:
-    print ('ERROR: Recon only implemented 1 repetition'); sys.exit(1)
+    print ('ERROR: Recon only implemented 1 repetition'); 
+    sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
    METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1 or \
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
-    print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
+    print ('ERROR: Recon for parallel acquisition not implemented'); 
+    sys.exit(1)
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
