@@ -195,7 +195,7 @@ for i in range (0,nfiles):
     FIDdata += input_data
 input_data = 0 # free memory
 FIDdata /= nfiles
-new_RG = int(floor(32767./np.amax(np.abs(FIDdata))))
+new_RG = int(floor(2147483647./np.amax(np.abs(FIDdata))))
 if new_RG<1: new_RG=1
 FIDdata *= new_RG # to maintain maximum dynamic range
 FIDdata = FIDdata.astype(np.int32)
