@@ -31,7 +31,7 @@
 #    with the following additional libraries: 
 #    - numpy
 #    - nibabel
-#    - matplotlib.pylab (optional)
+#    - tifffile (http://www.lfd.uci.edu/~gohlke/>)
 #
 
 from __future__ import print_function
@@ -41,7 +41,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
-
+from tifffile import imsave
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -392,6 +392,7 @@ print('.', end='') #progress indicator
 
 # use noise in all 8 corners to establish threshold
 N=10 # use 10% at the corners of the FOV
+std_factor=4 # factor to multiply standart deviation to determine threshold 
 tresh=np.empty(shape=8,dtype=np.float)
 avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
@@ -401,56 +402,56 @@ zstart=0; zend=int(IMGdata.shape[2]/N)
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[0]=np.mean(arr)
 std[0]=np.std(arr)
-tresh[0]=avg[0] + 4*std[0]
+tresh[0]=avg[0] + std_factor*std[0]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=0; zend=int(IMGdata.shape[2]/N)
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[1]=np.mean(arr)
 std[1]=np.std(arr)
-tresh[1]=avg[1] + 4*std[1]
+tresh[1]=avg[1] + std_factor*std[1]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=0; zend=int(IMGdata.shape[2]/N)
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[2]=np.mean(arr)
 std[2]=np.std(arr)
-tresh[2]=avg[2] + 4*std[2]
+tresh[2]=avg[2] + std_factor*std[2]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=0; zend=int(IMGdata.shape[2]/N)
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[3]=np.mean(arr)
 std[3]=np.std(arr)
-tresh[3]=avg[3] + 4*std[3]
+tresh[3]=avg[3] + std_factor*std[3]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=int(IMGdata.shape[2]-IMGdata.shape[2]/N); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[4]=np.mean(arr)
 std[4]=np.std(arr)
-tresh[4]=avg[4] + 4*std[4]
+tresh[4]=avg[4] + std_factor*std[4]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=int(IMGdata.shape[2]-IMGdata.shape[2]/N); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[5]=np.mean(arr)
 std[5]=np.std(arr)
-tresh[5]=avg[5] + 4*std[5]
+tresh[5]=avg[5] + std_factor*std[5]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=int(IMGdata.shape[2]-IMGdata.shape[2]/N); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[6]=np.mean(arr)
 std[6]=np.std(arr)
-tresh[6]=avg[6] + 4*std[6]
+tresh[6]=avg[6] + std_factor*std[6]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=int(IMGdata.shape[2]-IMGdata.shape[2]/N); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[7]=np.mean(arr)
 std[7]=np.std(arr)
-tresh[7]=avg[7] + 4*std[7]
+tresh[7]=avg[7] + std_factor*std[7]
 threshold=np.min(tresh)
 mask =  abs(IMGdata [:,:,:]) > threshold
 
@@ -468,7 +469,7 @@ IMGdata_PH *= 32767./max_PH
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
 
-#save NIFTI
+#save NIFTI and TIF
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
@@ -485,13 +486,17 @@ NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
 try:
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
+    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.tif'), IMGdata_ABS, compress=9)
     print('.', end='') #progress indicator
-    nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz'))    
+    nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz')) 
+    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.tif'), IMGdata_ABS*mask, compress=9)        
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
+    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.tif'), IMGdata_PH, compress=9)
 except:
     print ('\nERROR:  problem while writing results'); sys.exit(1)
-print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
+print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz/tif')   
+
 
 #end
 if sys.platform=="win32": os.system("pause") # windows
