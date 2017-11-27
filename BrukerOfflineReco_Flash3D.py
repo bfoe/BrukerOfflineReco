@@ -41,7 +41,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
-from tifffile import imsave
+#from tifffile import imsave
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -471,28 +471,41 @@ print('.', end='') #progress indicator
 
 #save NIFTI and TIF
 aff = np.eye(4)
-aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
-NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
-NIFTIimg_ABS.header['sform_code']=1
-NIFTIimg_ABS.header['qform_code']=1
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_ABS.header['pixdim'][1]= SpatResol_perm[0]*1000
+NIFTIimg_ABS.header['pixdim'][2]= SpatResol_perm[1]*1000
+NIFTIimg_ABS.header['pixdim'][3]= SpatResol_perm[2]*1000
+NIFTIimg_ABS.header['xyzt_units']=3
+NIFTIimg_ABS.header['qform_code']=1
+NIFTIimg_ABS.set_sform(np.zeros((4, 4)), code=0)
+NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_ABS_masked.header['pixdim'][1]= SpatResol_perm[0]*1000
+NIFTIimg_ABS_masked.header['pixdim'][2]= SpatResol_perm[1]*1000
+NIFTIimg_ABS_masked.header['pixdim'][3]= SpatResol_perm[2]*1000
+NIFTIimg_ABS_masked.header['xyzt_units']=3
+NIFTIimg_ABS_masked.header['qform_code']=1
+NIFTIimg_ABS_masked.set_sform(np.zeros((4, 4)), code=0)
+NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
+NIFTIimg_PH.header['pixdim'][1]= SpatResol_perm[0]*1000
+NIFTIimg_PH.header['pixdim'][2]= SpatResol_perm[1]*1000
+NIFTIimg_PH.header['pixdim'][3]= SpatResol_perm[2]*1000
+NIFTIimg_PH.header['xyzt_units']=3
+NIFTIimg_PH.header['qform_code']=1
+NIFTIimg_PH.set_sform(np.zeros((4, 4)), code=0)
 #write
 try:
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
-    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.tif'), IMGdata_ABS, compress=9)
+#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.tif'), IMGdata_ABS, compress=9)
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz')) 
-    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.tif'), IMGdata_ABS*mask, compress=9)        
+#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.tif'), IMGdata_ABS*mask, compress=9)        
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
-    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.tif'), IMGdata_PH, compress=9)
+#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.tif'), IMGdata_PH, compress=9)
 except:
     print ('\nERROR:  problem while writing results'); sys.exit(1)
 print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz/tif')   
