@@ -221,37 +221,6 @@ for i in range(0,dim[2]): FIDdata[:,:,order2[i]]=FIDdata_tmp[:,:,i]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
 
-#Hanning filter
-percentage = 5.
-npoints_x = int(float(dim[0])*percentage/100.)
-hanning_x = np.empty(shape=(dim[0]),dtype=np.float32)
-x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
-hanning_x [0:npoints_x] = np.power(np.sin(x_),2)
-hanning_x [npoints_x:hanning_x.shape[0]-npoints_x] = 1
-x_ = x_[::-1] # reverse x_
-hanning_x [hanning_x.shape[0]-npoints_x:hanning_x.shape[0]] = np.power(np.sin(x_),2)
-#print (hanning_x)
-FIDdata[:,:,:] *= hanning_x [:,None,None]
-npoints_y = int(float(dim[1])*percentage/100.)
-hanning_y = np.empty(shape=(dim[1]),dtype=np.float32)
-y_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
-hanning_y [0:npoints_y] = np.power(np.sin(y_),2)
-hanning_y [npoints_y:hanning_y.shape[0]-npoints_y] = 1
-y_ = y_[::-1] # reverse y_
-hanning_y [hanning_y.shape[0]-npoints_y:hanning_y.shape[0]] = np.power(np.sin(y_),2)
-#print (hanning_x)
-FIDdata[:,:,:] *= hanning_y [None,:,None]
-npoints_z = int(float(dim[2])*percentage/100.)
-hanning_z = np.empty(shape=(dim[2]),dtype=np.float32)
-z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
-hanning_z [0:npoints_z] = np.power(np.sin(z_),2)
-hanning_z [npoints_z:hanning_z.shape[0]-npoints_z] = 1
-z_ = z_[::-1] # reverse z_
-hanning_z [hanning_z.shape[0]-npoints_z:hanning_z.shape[0]] = np.power(np.sin(z_),2)
-#print (hanning_x)
-FIDdata[:,:,:] *= hanning_z [None,None,:]
-print('.', end='') #progress indicator
-
 # apply FOV offsets = (linear phase in k-space)
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
 SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
@@ -279,6 +248,61 @@ FIDdata_ZF = 0 #free memory
 dim=FIDdata.shape
 print('.', end='') #progress indicator
 
+#roll partial echo (at Bruker aka echo position)
+EchoPosition_raw=METHODdata["PVM_EchoPosition"]
+EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
+EchoPosition=int(EchoPosition_raw/100.*dim[0])
+if METHODdata["Method"] == "FISP":
+   if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
+      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])
+FIDdata=np.roll(FIDdata, dim[0]/2-EchoPosition, axis=(0))
+
+# find borders in case of partial echo and/or phase encoding
+nz = np.asarray(np.nonzero (FIDdata))
+first_x=np.amin(nz[0,:]); last_x=np.amax(nz[0,:])
+first_y=np.amin(nz[1,:]); last_y=np.amax(nz[1,:])
+first_z=np.amin(nz[2,:]); last_z=np.amax(nz[2,:])
+#print (FIDdata.shape)
+#print (first_x, FIDdata.shape[0]-last_x-1)
+#print (first_y, FIDdata.shape[1]-last_y-1)
+#print (first_z, FIDdata.shape[2]-last_z-1)
+#if first_x!=FIDdata.shape[0]-last_x-1: print ('partial acquisition in dimension 0')
+#if first_y!=FIDdata.shape[1]-last_y-1: print ('partial acquisition in dimension 1')
+#if first_z!=FIDdata.shape[2]-last_z-1: print ('partial acquisition in dimension 2')
+
+# todo partial acquisition recon (aka homodyne recon)
+
+#Hanning filter
+percentage = 5.
+npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+hanning_x [first_x:first_x+npoints_x] = np.power(np.sin(x_),2)
+hanning_x [first_x+npoints_x:last_x-npoints_x+1] = 1
+x_ = x_[::-1] # reverse x_
+hanning_x [last_x-npoints_x+1:last_x+1] = np.power(np.sin(x_),2)
+#print (hanning_x)
+FIDdata[:,:,:] *= hanning_x [:,None,None]
+npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)
+hanning_y = np.zeros(shape=(dim[1]),dtype=np.float32)
+y_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
+hanning_y [first_y:first_y+npoints_y] = np.power(np.sin(y_),2)
+hanning_y [first_y+npoints_y:last_y-npoints_y+1] = 1
+y_ = y_[::-1] # reverse y_
+hanning_y [last_y-npoints_y+1:last_y+1] = np.power(np.sin(y_),2)
+#print (hanning_y)
+FIDdata[:,:,:] *= hanning_y [None,:,None]
+npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
+hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
+z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+hanning_z [first_z:first_z+npoints_z] = np.power(np.sin(z_),2)
+hanning_z [first_z+npoints_z:last_z-npoints_z+1] = 1
+z_ = z_[::-1] # reverse z_
+hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
+#print (hanning_z)
+FIDdata[:,:,:] *= hanning_z [None,None,:]
+print('.', end='') #progress indicator
+
 #FFT (individually by axis, to save memory)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
@@ -292,7 +316,7 @@ Memory_OK=True
 try: dummy=np.empty(IMGdata.shape, dtype=np.complex128); dummy=0 # try to allocate more memory
 except: Memory_OK=False
 if Memory_OK:
-    IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
     IMGdata = np.fft.fftshift(IMGdata, axes=(1))
     IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
     IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
@@ -304,7 +328,7 @@ if Memory_OK:
 else:
     for k in range(0,IMGdata.shape[1]):
         if k%30==0: print(',', end='') #progress indicator
-        IMGdata[:,k,:] = np.roll(IMGdata[:,k,:], -EchoPosition, axis=(0))
+        IMGdata[:,k,:] = np.fft.fftshift(IMGdata[:,k,:], axes=(0))
         IMGdata[:,k,:] = np.fft.fft(IMGdata[:,k,:], axis=(0))
         IMGdata[:,k,:] = np.fft.fftshift(IMGdata[:,k,:], axes=(0))
     for i in range(0,IMGdata.shape[0]):
@@ -463,39 +487,33 @@ max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-#IMGdata_PH  = np.angle(IMGdata)
 IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
 max_PH = np.pi; 
 IMGdata_PH *= 32767./max_PH
 IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
+IMGdata=0 # free memory
 
 #save NIFTI and TIF
 aff = np.eye(4)
+aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_ABS.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_ABS.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_ABS.shape[2]/2)*aff[2,2]
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
-NIFTIimg_ABS.header['pixdim'][1]= SpatResol_perm[0]*1000
-NIFTIimg_ABS.header['pixdim'][2]= SpatResol_perm[1]*1000
-NIFTIimg_ABS.header['pixdim'][3]= SpatResol_perm[2]*1000
-NIFTIimg_ABS.header['xyzt_units']=3
-NIFTIimg_ABS.header['qform_code']=1
-NIFTIimg_ABS.set_sform(np.zeros((4, 4)), code=0)
+NIFTIimg_ABS.header.set_xyzt_units(3, 8)
+NIFTIimg_ABS.set_sform(aff, code=0)
+NIFTIimg_ABS.set_qform(aff, code=1)
 NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
-NIFTIimg_ABS_masked.header['pixdim'][1]= SpatResol_perm[0]*1000
-NIFTIimg_ABS_masked.header['pixdim'][2]= SpatResol_perm[1]*1000
-NIFTIimg_ABS_masked.header['pixdim'][3]= SpatResol_perm[2]*1000
-NIFTIimg_ABS_masked.header['xyzt_units']=3
-NIFTIimg_ABS_masked.header['qform_code']=1
-NIFTIimg_ABS_masked.set_sform(np.zeros((4, 4)), code=0)
+NIFTIimg_ABS_masked.header.set_xyzt_units(3, 8)
+NIFTIimg_ABS_masked.set_sform(aff, code=0)
+NIFTIimg_ABS_masked.set_qform(aff, code=1)
 NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
-NIFTIimg_PH.header['pixdim'][1]= SpatResol_perm[0]*1000
-NIFTIimg_PH.header['pixdim'][2]= SpatResol_perm[1]*1000
-NIFTIimg_PH.header['pixdim'][3]= SpatResol_perm[2]*1000
-NIFTIimg_PH.header['xyzt_units']=3
-NIFTIimg_PH.header['qform_code']=1
-NIFTIimg_PH.set_sform(np.zeros((4, 4)), code=0)
+NIFTIimg_PH.header.set_xyzt_units(3, 8)
+NIFTIimg_PH.set_sform(aff, code=0)
+NIFTIimg_PH.set_qform(aff, code=1)
 #write
 try:
     print('.', end='') #progress indicator
@@ -510,7 +528,6 @@ try:
 except:
     print ('\nERROR:  problem while writing results'); sys.exit(1)
 print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
-
 
 #end
 if sys.platform=="win32": os.system("pause") # windows
