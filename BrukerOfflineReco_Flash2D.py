@@ -287,9 +287,10 @@ print('.', end='') #progress indicator
 #FFT (individually by axis, to save memory)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
-if METHODdata["Method"] == "FISP" and METHODdata["ssfp"] == "ECHO":
-   EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])
-else: EchoPosition=int(EchoPosition_raw/100.*dim[0])
+EchoPosition=int(EchoPosition_raw/100.*dim[0])
+if METHODdata["Method"] == "FISP":
+   if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
+      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0]) 
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
 IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
