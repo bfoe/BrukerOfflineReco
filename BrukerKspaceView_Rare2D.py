@@ -154,6 +154,9 @@ METHODdata=ReadParamFile(METHODfile)
 if METHODdata["Method"] not in ["RARE", "MSME"]:
     print ('ERROR: Recon only implemented for RARE/MSME methods'); 
     sys.exit(1)
+if  METHODdata["Method"] == "MSME" and METHODdata["NEchoes"] != 1:
+    print ('ERROR: Recon of MSME method only implemented for 1 echo'); 
+    sys.exit(1)        
 if  METHODdata["PVM_SpatDimEnum"] != "2D":
     print ('ERROR: Recon only implemented for 2D methods'); 
     sys.exit(1)    
