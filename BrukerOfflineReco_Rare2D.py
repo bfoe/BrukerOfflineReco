@@ -184,9 +184,12 @@ METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
 #check for not implemented stuff
-if METHODdata["Method"] != "RARE" or METHODdata["PVM_SpatDimEnum"] != "2D":
-    print ('ERROR: Recon only implemented for RARE 2D method'); 
+if METHODdata["Method"] not in ["RARE", "MSME"]:
+    print ('ERROR: Recon only implemented for RARE/MSME methods'); 
     sys.exit(1)
+if  METHODdata["PVM_SpatDimEnum"] != "2D":
+    print ('ERROR: Recon only implemented for 2D methods'); 
+    sys.exit(1)    
 if METHODdata["PVM_NSPacks"] != 1:
     print ('ERROR: Recon only implemented 1 package'); 
     sys.exit(1) 
@@ -204,7 +207,9 @@ print ('Starting recon')
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
 dim=METHODdata["PVM_EncMatrix"]
-dim=[dim[0],METHODdata["PVM_RareFactor"],METHODdata["PVM_SPackArrNSlices"],int(dim[1]/METHODdata["PVM_RareFactor"])]
+try: dim_RareFactor = METHODdata["PVM_RareFactor"]
+except: dim_RareFactor = 1
+dim=[dim[0],dim_RareFactor,METHODdata["PVM_SPackArrNSlices"],int(dim[1]/dim_RareFactor)]
 dim0 = dim[0]; dim0_mod_128 = dim0%128
 if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
 try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2],dim[3], order="F")
