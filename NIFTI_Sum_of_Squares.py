@@ -129,9 +129,14 @@ try: os.makedirs(new_dirname)
 except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
 print ("Saving results")
 #write averaged fid file
-img_SoS = nib.Nifti1Image(data0, img0.get_affine())
-img_SoS.header['sform_code']=1
-img_SoS.header['qform_code']=1
+aff = img0.get_affine()
+unit_xyz, unit_t = img0.header.get_xyzt_units()
+if unit_xyz == 'unknown': unit_xyz=0
+if unit_t   == 'unknown': unit_t=0
+img_SoS = nib.Nifti1Image(data0, aff)
+img_SoS.header.set_xyzt_units(unit_xyz, unit_t)
+img_SoS.set_sform(aff, code=0)
+img_SoS.set_qform(aff, code=1)
 img_SoS.header.set_slope_inter(slope,0)
 new_filename=os.path.basename(FIDfile[0])
 new_filename = new_filename[0:new_filename.rfind('_')]+'_SumOfSquares.nii.gz'
