@@ -41,6 +41,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
+import scipy.ndimage
 #from tifffile import imsave
 
 TK_installed=True
@@ -257,20 +258,152 @@ if METHODdata["Method"] == "FISP":
       EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])
 FIDdata=np.roll(FIDdata, dim[0]/2-EchoPosition, axis=(0))
 
-# find borders in case of partial echo and/or phase encoding
+#find borders in case of partial echo and/or phase encoding
 nz = np.asarray(np.nonzero (FIDdata))
 first_x=np.amin(nz[0,:]); last_x=np.amax(nz[0,:])
 first_y=np.amin(nz[1,:]); last_y=np.amax(nz[1,:])
 first_z=np.amin(nz[2,:]); last_z=np.amax(nz[2,:])
-#print (FIDdata.shape)
-#print (first_x, FIDdata.shape[0]-last_x-1)
-#print (first_y, FIDdata.shape[1]-last_y-1)
-#print (first_z, FIDdata.shape[2]-last_z-1)
-#if first_x!=FIDdata.shape[0]-last_x-1: print ('partial acquisition in dimension 0')
-#if first_y!=FIDdata.shape[1]-last_y-1: print ('partial acquisition in dimension 1')
-#if first_z!=FIDdata.shape[2]-last_z-1: print ('partial acquisition in dimension 2')
+#calculate % increase of resolution if partial fourrier recon used
+percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
+percentual_inc_y=float(last_y+first_y+1-dim[1])/float(last_y-first_y)*100.
+percentual_inc_z=float(last_z+first_z+1-dim[2])/float(last_z-first_z)*100.
 
-# todo partial acquisition recon (aka homodyne recon)
+min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
+if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual or abs(percentual_inc_z)>min_percentual:
+    #low pass filter for phase correction (function: 1-hanning^2)
+    percentage = 10 # center only (lowpass)
+    FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
+    FIDlowpass [:,:,:] = FIDdata [:,:,:]
+    npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+    hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+    x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
+    hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
+    FIDlowpass[:,:,:] *= hanning_x [:,None,None]
+    npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)
+    hanning_y = np.zeros(shape=(dim[1]),dtype=np.float32)
+    y_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_y+1)
+    hanning_y [int(dim[1]/2)-npoints_y:int(dim[1]/2)+npoints_y+1] = 1-np.power(np.sin(y_),4)
+    FIDlowpass[:,:,:] *= hanning_y [None,:,None]
+    npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
+    hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
+    z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
+    hanning_z [int(dim[2]/2)-npoints_z:int(dim[2]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
+    FIDlowpass[:,:,:] *= hanning_z [None,None,:]
+    #FFT lowpass data
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0))
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(1))
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(2))
+    FIDlowpass = np.fft.fft(FIDlowpass, axis=0)
+    FIDlowpass = np.fft.fft(FIDlowpass, axis=1)
+    FIDlowpass = np.fft.fft(FIDlowpass, axis=2)
+    #FFT actual data
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0))
+    FIDdata = np.fft.fftshift(FIDdata, axes=(1))
+    FIDdata = np.fft.fftshift(FIDdata, axes=(2))
+    FIDdata = np.fft.fft(FIDdata, axis=0)
+    FIDdata = np.fft.fft(FIDdata, axis=1)
+    FIDdata = np.fft.fft(FIDdata, axis=2)
+    # subtract phase difference from actual
+    FIDlowpass = FIDdata/FIDlowpass # use this phase
+    FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
+    FIDlowpass = 0 # free memory
+    #inverse FFT
+    FIDdata = np.fft.ifft(FIDdata, axis=0)
+    FIDdata = np.fft.ifft(FIDdata, axis=1)
+    FIDdata = np.fft.ifft(FIDdata, axis=2)
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0))
+    FIDdata = np.fft.fftshift(FIDdata, axes=(1))
+    FIDdata = np.fft.fftshift(FIDdata, axes=(2))
+    
+    # copy complex conjugates
+    if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning        
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)  
+        compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,::-1,::-1] # reverse array
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(1)) #symetry point in dim/2
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+        hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
+        FIDdata[1:first_x+1+npoints_x,:,:] *= hanning_x [:,None,None]
+        hanning_x = 1.- hanning_x
+        compl_conjugate_x *= hanning_x [:,None,None]
+        FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
+        first_x=dim[0]-last_x
+    elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)        
+        compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,::-1,::-1] # reverse array
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(1)) #symetry point in dim/2
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+        hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
+        hanning_x = hanning_x [::-1] #reverse array
+        FIDdata[last_x+1-npoints_x:dim[0],:,:] *= hanning_x [:,None,None]
+        hanning_x = 1.- hanning_x
+        compl_conjugate_x *= hanning_x [:,None,None]        
+        FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
+        last_x=dim[0]-first_x       
+    if percentual_inc_y>min_percentual: # dimension 1 points missing at the beginning
+        print ('partial fourier Y')
+        npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)  
+        compl_conjugate_y = np.conj(FIDdata[:,dim[1]-first_y-npoints_y:dim[1],:])
+        compl_conjugate_y = compl_conjugate_y[::-1,::-1,::-1] # reverse array
+        compl_conjugate_y=np.roll(compl_conjugate_y, 1, axis=(0)) #symetry point in dim/2
+        compl_conjugate_y=np.roll(compl_conjugate_y, 1, axis=(2)) #symetry point in dim/2
+        hanning_y = np.zeros(shape=(compl_conjugate_y.shape[1]),dtype=np.float32)
+        y_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
+        hanning_y [compl_conjugate_y.shape[1]-npoints_y:compl_conjugate_y.shape[1]] = np.power(np.sin(y_),2)
+        FIDdata[:,1:first_y+1+npoints_y,:] *= hanning_y [None,:,None]
+        hanning_y = 1.- hanning_y
+        compl_conjugate_y *= hanning_y [None,:,None]
+        FIDdata[:,1:first_y+1+npoints_y,:] += compl_conjugate_y[:,:,:]
+        first_y=dim[1]-last_y        
+    elif -1.*percentual_inc_y>min_percentual: # dimension 1 points missing at the end
+        npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)        
+        compl_conjugate_y = np.conj(FIDdata[:,1:dim[1]-last_y+npoints_y,:])
+        compl_conjugate_y = compl_conjugate_y[::-1,::-1,::-1] # reverse array
+        compl_conjugate_y=np.roll(compl_conjugate_y, 1, axis=(0)) #symetry point in dim/2
+        compl_conjugate_y=np.roll(compl_conjugate_y, 1, axis=(2)) #symetry point in dim/2
+        hanning_y = np.zeros(shape=(compl_conjugate_y.shape[1]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
+        hanning_y [compl_conjugate_y.shape[1]-npoints_y:compl_conjugate_y.shape[1]] = np.power(np.sin(x_),2)
+        hanning_y = hanning_y [::-1] #reverse array
+        FIDdata[:,last_y+1-npoints_y:dim[1],:] *= hanning_y [None,:,None]
+        hanning_y = 1.- hanning_y
+        compl_conjugate_y *= hanning_y [None,:,None]        
+        FIDdata[:,last_y+1-npoints_y:dim[1],:] += compl_conjugate_y[:,:,:]       
+        last_y=dim[1]-first_y         
+    if percentual_inc_z>min_percentual: # dimension 2 points missing at the beginning
+        npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)  
+        compl_conjugate_z = np.conj(FIDdata[:,:,dim[2]-first_z-npoints_z:dim[2]])
+        compl_conjugate_z = compl_conjugate_z[::-1,::-1,::-1] # reverse array
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(1)) #symetry point in dim/2
+        hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
+        y_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+        hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(y_),2)
+        FIDdata[:,:,1:first_z+1+npoints_z] *= hanning_z [None,None,:]
+        hanning_z = 1.- hanning_z
+        compl_conjugate_z *= hanning_z [None,None,:]
+        FIDdata[:,:,1:first_z+1+npoints_z] += compl_conjugate_z[:,:,:]
+        first_z=dim[2]-last_z        
+    elif -1.*percentual_inc_z>min_percentual: # dimension 2 points missing at the end
+        npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)        
+        compl_conjugate_z = np.conj(FIDdata[:,:,1:dim[2]-last_z+npoints_z])
+        compl_conjugate_z = compl_conjugate_z[::-1,::-1,::-1] # reverse array
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(1)) #symetry point in dim/2
+        hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+        hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(x_),2)
+        hanning_z = hanning_z [::-1] #reverse array
+        FIDdata[:,:,last_z+1-npoints_z:dim[2]] *= hanning_z [None,None,:]
+        hanning_z = 1.- hanning_z
+        compl_conjugate_z *= hanning_z [None,None,:]        
+        FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
+        last_z=dim[2]-first_z 
 
 #Hanning filter
 percentage = 5.
@@ -301,7 +434,8 @@ z_ = z_[::-1] # reverse z_
 hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
 #print (hanning_z)
 FIDdata[:,:,:] *= hanning_z [None,None,:]
-print('.', end='') #progress indicator
+print('.', end='') #progress indicator      
+
 
 #FFT (individually by axis, to save memory)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
