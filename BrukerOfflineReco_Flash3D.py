@@ -30,8 +30,8 @@
 #    This program was developed under Python Version 2.7
 #    with the following additional libraries: 
 #    - numpy
+#    - pyfftw (optional)
 #    - nibabel
-#    - tifffile (http://www.lfd.uci.edu/~gohlke/>)
 #
 
 from __future__ import print_function
@@ -41,8 +41,12 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
-import scipy.ndimage
-#from tifffile import imsave
+
+pyfftw_installed = True
+try: 
+    import pyfftw
+    test = pyfftw.interfaces.numpy_fft.fft(np.asarray([0,1,2,3]))
+except: pyfftw_installed = False
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -138,7 +142,25 @@ def smooth(x,window_len):
     w=np.hanning(window_len)
     y=np.convolve(w/w.sum(),s,mode='same')
     return y[window_len:-window_len+1]  
-    
+
+def FFT3D (array):
+    if pyfftw_installed: 
+       array = pyfftw.interfaces.numpy_fft.fftn(array, axes=(0,1,2))
+    else: 
+        for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.fft(array[i,:,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.fft(array[i,:,:], axis=(1))          
+    return array 
+
+def iFFT3D (array):
+    if pyfftw_installed: 
+       array = pyfftw.interfaces.numpy_fft.ifftn(array, axes=(0,1,2))
+    else: 
+        for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(1))          
+    return array 
+       
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -182,6 +204,11 @@ ACQPdata=ReadParamFile(ACQPfile)
 #read method file
 METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
+
+#compatibility with Paravision 6
+METHODdata["Method"] = METHODdata["Method"].replace ("<Bruker:","")
+METHODdata["Method"] = METHODdata["Method"].replace (">","")
+
 
 #check for not implemented stuff
 if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP" or METHODdata["Method"] =="GEFC") or METHODdata["PVM_SpatDimEnum"] != "3D":
@@ -255,7 +282,7 @@ EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
 if METHODdata["Method"] == "FISP":
    if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
-      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])
+      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])      
 FIDdata=np.roll(FIDdata, dim[0]/2-EchoPosition, axis=(0))
 
 #find borders in case of partial echo and/or phase encoding
@@ -267,6 +294,7 @@ first_z=np.amin(nz[2,:]); last_z=np.amax(nz[2,:])
 percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
 percentual_inc_y=float(last_y+first_y+1-dim[1])/float(last_y-first_y)*100.
 percentual_inc_z=float(last_z+first_z+1-dim[2])/float(last_z-first_z)*100.
+print('.', end='') #progress indicator
 
 min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
 if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual or abs(percentual_inc_z)>min_percentual:
@@ -289,35 +317,28 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
     z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
     hanning_z [int(dim[2]/2)-npoints_z:int(dim[2]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
     FIDlowpass[:,:,:] *= hanning_z [None,None,:]
+    print('.', end='') #progress indicator
     #FFT lowpass data
-    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0))
-    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(1))
-    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(2))
-    FIDlowpass = np.fft.fft(FIDlowpass, axis=0)
-    FIDlowpass = np.fft.fft(FIDlowpass, axis=1)
-    FIDlowpass = np.fft.fft(FIDlowpass, axis=2)
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,1,2))
+    FIDlowpass = FFT3D(FIDlowpass)
+    print('.', end='') #progress indicator
     #FFT actual data
-    FIDdata = np.fft.fftshift(FIDdata, axes=(0))
-    FIDdata = np.fft.fftshift(FIDdata, axes=(1))
-    FIDdata = np.fft.fftshift(FIDdata, axes=(2))
-    FIDdata = np.fft.fft(FIDdata, axis=0)
-    FIDdata = np.fft.fft(FIDdata, axis=1)
-    FIDdata = np.fft.fft(FIDdata, axis=2)
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,1,2))
+    FIDdata = FFT3D(FIDdata)
+    print('.', end='') #progress indicator
     # subtract phase difference from actual
     FIDlowpass = FIDdata/FIDlowpass # use this phase
     FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
     FIDlowpass = 0 # free memory
     #inverse FFT
-    FIDdata = np.fft.ifft(FIDdata, axis=0)
-    FIDdata = np.fft.ifft(FIDdata, axis=1)
-    FIDdata = np.fft.ifft(FIDdata, axis=2)
-    FIDdata = np.fft.fftshift(FIDdata, axes=(0))
-    FIDdata = np.fft.fftshift(FIDdata, axes=(1))
-    FIDdata = np.fft.fftshift(FIDdata, axes=(2))
+    FIDdata = iFFT3D(FIDdata)
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,1,2))    
+    print('.', end='') #progress indicator
     
     # copy complex conjugates
+    percentage = 5 # mix conjugate with original
     if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning        
-        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)  
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
         compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:])
         compl_conjugate_x = compl_conjugate_x[::-1,::-1,::-1] # reverse array
         compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(1)) #symetry point in dim/2
@@ -330,6 +351,7 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         compl_conjugate_x *= hanning_x [:,None,None]
         FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
         first_x=dim[0]-last_x
+        compl_conjugate_x = 0 # free memory
     elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
         npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)        
         compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:])
@@ -344,7 +366,8 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None]        
         FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
-        last_x=dim[0]-first_x       
+        last_x=dim[0]-first_x
+        compl_conjugate_x = 0 # free memory     
     if percentual_inc_y>min_percentual: # dimension 1 points missing at the beginning
         print ('partial fourier Y')
         npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)  
@@ -359,7 +382,8 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         hanning_y = 1.- hanning_y
         compl_conjugate_y *= hanning_y [None,:,None]
         FIDdata[:,1:first_y+1+npoints_y,:] += compl_conjugate_y[:,:,:]
-        first_y=dim[1]-last_y        
+        first_y=dim[1]-last_y
+        compl_conjugate_y = 0 # free memory       
     elif -1.*percentual_inc_y>min_percentual: # dimension 1 points missing at the end
         npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)        
         compl_conjugate_y = np.conj(FIDdata[:,1:dim[1]-last_y+npoints_y,:])
@@ -374,7 +398,8 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         hanning_y = 1.- hanning_y
         compl_conjugate_y *= hanning_y [None,:,None]        
         FIDdata[:,last_y+1-npoints_y:dim[1],:] += compl_conjugate_y[:,:,:]       
-        last_y=dim[1]-first_y         
+        last_y=dim[1]-first_y
+        compl_conjugate_y = 0 # free memory       
     if percentual_inc_z>min_percentual: # dimension 2 points missing at the beginning
         npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)  
         compl_conjugate_z = np.conj(FIDdata[:,:,dim[2]-first_z-npoints_z:dim[2]])
@@ -388,7 +413,8 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         hanning_z = 1.- hanning_z
         compl_conjugate_z *= hanning_z [None,None,:]
         FIDdata[:,:,1:first_z+1+npoints_z] += compl_conjugate_z[:,:,:]
-        first_z=dim[2]-last_z        
+        first_z=dim[2]-last_z
+        compl_conjugate_z = 0 # free memory         
     elif -1.*percentual_inc_z>min_percentual: # dimension 2 points missing at the end
         npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)        
         compl_conjugate_z = np.conj(FIDdata[:,:,1:dim[2]-last_z+npoints_z])
@@ -404,9 +430,11 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         compl_conjugate_z *= hanning_z [None,None,:]        
         FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
         last_z=dim[2]-first_z 
-
+        compl_conjugate_z = 0 # free memory
+    print('.', end='') #progress indicator 
+        
 #Hanning filter
-percentage = 5.
+percentage = 10.
 npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
 hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
 x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
@@ -446,35 +474,9 @@ if METHODdata["Method"] == "FISP":
       EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0]) 
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
-Memory_OK=True
-try: dummy=np.empty(IMGdata.shape, dtype=np.complex128); dummy=0 # try to allocate more memory
-except: Memory_OK=False
-if Memory_OK:
-    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(1))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=1); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(1))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-else:
-    for k in range(0,IMGdata.shape[1]):
-        if k%30==0: print(',', end='') #progress indicator
-        IMGdata[:,k,:] = np.fft.fftshift(IMGdata[:,k,:], axes=(0))
-        IMGdata[:,k,:] = np.fft.fft(IMGdata[:,k,:], axis=(0))
-        IMGdata[:,k,:] = np.fft.fftshift(IMGdata[:,k,:], axes=(0))
-    for i in range(0,IMGdata.shape[0]):
-        if i%30==0: print(',', end='') #progress indicator
-        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(0))
-        IMGdata[i,:,:] = np.fft.fft(IMGdata[i,:,:], axis=(0))
-        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(0))
-    for i in range(0,IMGdata.shape[0]):
-        if i%30==0: print(',', end='') #progress indicator
-        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(1))
-        IMGdata[i,:,:] = np.fft.fft(IMGdata[i,:,:], axis=(1))
-        IMGdata[i,:,:] = np.fft.fftshift(IMGdata[i,:,:], axes=(1))       
+IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))
+IMGdata = FFT3D(IMGdata)
+IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))          
 print('.', end='') #progress indicator
 
 #throw out antialiasing
@@ -628,7 +630,7 @@ IMGdata_PH = IMGdata_PH.astype(np.int16)
 print('.', end='') #progress indicator
 IMGdata=0 # free memory
 
-#save NIFTI and TIF
+#save NIFTI
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_ABS.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_ABS.shape[1]/2)*aff[1,1]
@@ -652,13 +654,10 @@ NIFTIimg_PH.set_qform(aff, code=1)
 try:
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
-#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.tif'), IMGdata_ABS, compress=9)
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz')) 
-#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.tif'), IMGdata_ABS*mask, compress=9)        
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
-#    imsave (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.tif'), IMGdata_PH, compress=9)
 except:
     print ('\nERROR:  problem while writing results'); sys.exit(1)
 print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
