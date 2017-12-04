@@ -220,9 +220,8 @@ if METHODdata["PVM_NSPacks"] != 1:
 if METHODdata["PVM_NRepetitions"] != 1:
     print ('ERROR: Recon only implemented 1 repetition'); 
     sys.exit(1)
-if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1 or \
-   METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
+if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 or\
+   METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
 
@@ -238,14 +237,21 @@ try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]
 
+#partial phase acquisition - add zeros
+if METHODdata["PVM_EncPftAccel1"] != 1:
+   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2]))
+   FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
+   dim=FIDrawdata_CPX.shape
+# for the second phase encoding direction there is no parameter PVM_EncPftAccel2 (!?!)
+
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-order1=METHODdata["PVM_EncSteps1"]+dim[1]/2                             
-for i in range(0,dim[1]): FIDdata_tmp[:,order1[i],:]=FIDrawdata_CPX[:,i,:]
+order1=METHODdata["PVM_EncSteps1"]+dim[1]/2                          
+for i in range(0,order1.shape[0]): FIDdata_tmp[:,order1[i],:]=FIDrawdata_CPX[:,i,:]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_EncSteps2"]+dim[2]/2                             
-for i in range(0,dim[2]): FIDdata[:,:,order2[i]]=FIDdata_tmp[:,:,i]
+for i in range(0,order2.shape[0]): FIDdata[:,:,order2[i]]=FIDdata_tmp[:,:,i]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
 
@@ -349,11 +355,13 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         FIDdata[1:first_x+1+npoints_x,:,:] *= hanning_x [:,None,None]
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None]
+        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2])
+        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2])
         FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
         first_x=dim[0]-last_x
         compl_conjugate_x = 0 # free memory
     elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
-        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)        
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)       
         compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:])
         compl_conjugate_x = compl_conjugate_x[::-1,::-1,::-1] # reverse array
         compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(1)) #symetry point in dim/2
@@ -364,12 +372,13 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         hanning_x = hanning_x [::-1] #reverse array
         FIDdata[last_x+1-npoints_x:dim[0],:,:] *= hanning_x [:,None,None]
         hanning_x = 1.- hanning_x
-        compl_conjugate_x *= hanning_x [:,None,None]        
+        compl_conjugate_x *= hanning_x [:,None,None]
+        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2])
+        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2])
         FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
         last_x=dim[0]-first_x
         compl_conjugate_x = 0 # free memory     
     if percentual_inc_y>min_percentual: # dimension 1 points missing at the beginning
-        print ('partial fourier Y')
         npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)  
         compl_conjugate_y = np.conj(FIDdata[:,dim[1]-first_y-npoints_y:dim[1],:])
         compl_conjugate_y = compl_conjugate_y[::-1,::-1,::-1] # reverse array
