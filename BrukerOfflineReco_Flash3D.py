@@ -474,13 +474,7 @@ FIDdata[:,:,:] *= hanning_z [None,None,:]
 print('.', end='') #progress indicator      
 
 
-#FFT (individually by axis, to save memory)
-EchoPosition_raw=METHODdata["PVM_EchoPosition"]
-EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
-EchoPosition=int(EchoPosition_raw/100.*dim[0])
-if METHODdata["Method"] == "FISP":
-   if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
-      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0]) 
+#FFT
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
 IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))

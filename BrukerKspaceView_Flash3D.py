@@ -198,6 +198,9 @@ dim = FIDrawdata_CPX.shape
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
+if METHODdata["Method"] == "FISP":
+   if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
+      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0]) 
 # show the resulting images
 pl.figure()
 pl.subplot(131)
