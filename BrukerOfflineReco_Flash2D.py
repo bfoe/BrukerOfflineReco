@@ -139,6 +139,16 @@ def smooth(x,window_len):
     y=np.convolve(w/w.sum(),s,mode='same')
     return y[window_len:-window_len+1]  
     
+def FFT2D (array):
+    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(0))
+    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(1))        
+    return array 
+
+def iFFT2D (array):
+    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(0))
+    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(1))   
+    return array     
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -183,6 +193,11 @@ ACQPdata=ReadParamFile(ACQPfile)
 METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
+#compatibility with Paravision 6
+METHODdata["Method"] = METHODdata["Method"].replace ("<Bruker:","")
+METHODdata["Method"] = METHODdata["Method"].replace (">","")
+
+
 #check for not implemented stuff
 if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP") or METHODdata["PVM_SpatDimEnum"] != "2D":
     print ('ERROR: Recon only implemented for FLASH/FISP 2D method'); 
@@ -193,9 +208,8 @@ if METHODdata["PVM_NSPacks"] != 1:
 if METHODdata["PVM_NRepetitions"] != 1:
     print ('ERROR: Recon only implemented 1 repetition'); 
     sys.exit(1)
-if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or \
-   METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
+if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 or\
+   METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
 
@@ -220,42 +234,26 @@ elif METHODdata["Method"] == "FISP":
 else:
     print ('Error: unknown method',METHODdata["Method"])
     sys.exit(1)
-if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]    
-
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]  
+  
+#partial phase acquisition - add zeros
+if METHODdata["PVM_EncPftAccel1"] != 1:
+   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2]))
+   FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
+   dim=FIDrawdata_CPX.shape
+   
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
-for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
+for i in range(0,order1.shape[0]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
 if dim[1]>1: # more than one slice
-   for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+   for i in range(0,order2.shape[0]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
 else: # only one slice
    FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
-print('.', end='') #progress indicator
-
-#Hanning filter
-percentage = 5.
-npoints_x = int(float(dim[0])*percentage/100.)
-hanning_x = np.empty(shape=(dim[0]),dtype=np.float32)
-x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
-hanning_x [0:npoints_x] = np.power(np.sin(x_),2)
-hanning_x [npoints_x:hanning_x.shape[0]-npoints_x] = 1
-x_ = x_[::-1] # reverse x_
-hanning_x [hanning_x.shape[0]-npoints_x:hanning_x.shape[0]] = np.power(np.sin(x_),2)
-#print (hanning_x)
-FIDdata[:,:,:] *= hanning_x [:,None,None]
-npoints_z = int(float(dim[2])*percentage/100.)
-hanning_z = np.empty(shape=(dim[2]),dtype=np.float32)
-z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
-hanning_z [0:npoints_z] = np.power(np.sin(z_),2)
-hanning_z [npoints_z:hanning_z.shape[0]-npoints_z] = 1
-z_ = z_[::-1] # reverse z_
-hanning_z [hanning_z.shape[0]-npoints_z:hanning_z.shape[0]] = np.power(np.sin(z_),2)
-#print (hanning_x)
-FIDdata[:,:,:] *= hanning_z [None,None,:]
 print('.', end='') #progress indicator
 
 # apply FOV offsets = (linear phase in k-space)
@@ -284,21 +282,152 @@ FIDdata_ZF = 0 #free memory
 dim=FIDdata.shape
 print('.', end='') #progress indicator
 
-#FFT (individually by axis, to save memory)
+#roll partial echo (at Bruker aka echo position)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
-if METHODdata["Method"] == "FISP":
-   if METHODdata["ssfp"] == "ECHO": # ssfp only exists for method=FISP
-      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0]) 
+if METHODdata["Method"] == "FISP" and METHODdata["ssfp"] == "ECHO":
+      EchoPosition=dim[0]-int(EchoPosition_raw/100.*dim[0])      
+FIDdata=np.roll(FIDdata, dim[0]/2-EchoPosition, axis=(0))
+
+#find borders in case of partial echo and/or phase encoding
+nz = np.asarray(np.nonzero (FIDdata))
+first_x=np.amin(nz[0,:]); last_x=np.amax(nz[0,:])
+first_z=np.amin(nz[2,:]); last_z=np.amax(nz[2,:])
+#calculate % increase of resolution if partial fourrier recon used
+percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
+percentual_inc_z=float(last_z+first_z+1-dim[2])/float(last_z-first_z)*100.
+print('.', end='') #progress indicator
+print('.', end='') #progress indicator
+
+min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
+if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual:
+    #low pass filter for phase correction (function: 1-hanning^2)
+    percentage = 10 # center only (lowpass)
+    FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
+    FIDlowpass [:,:,:] = FIDdata [:,:,:]
+    npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+    hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+    x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
+    hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
+    FIDlowpass[:,:,:] *= hanning_x [:,None,None]
+    npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
+    hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
+    z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
+    hanning_z [int(dim[2]/2)-npoints_z:int(dim[2]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
+    FIDlowpass[:,:,:] *= hanning_z [None,None,:]
+    print('.', end='') #progress indicator
+    #FFT lowpass data
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,2))
+    FIDlowpass = FFT2D(FIDlowpass)
+    print('.', end='') #progress indicator
+    #FFT actual data
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,2))
+    FIDdata = FFT2D(FIDdata)
+    print('.', end='') #progress indicator
+    # subtract phase difference from actual
+    FIDlowpass = FIDdata/FIDlowpass # use this phase
+    FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
+    FIDlowpass = 0 # free memory
+    #inverse FFT
+    FIDdata = iFFT2D(FIDdata)
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,2))    
+    print('.', end='') #progress indicator
+
+    # copy complex conjugates
+    percentage = 5 # mix conjugate with original
+    if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning        
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+        compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1] # reverse array
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+        hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
+        FIDdata[1:first_x+1+npoints_x,:,:] *= hanning_x [:,None,None]
+        hanning_x = 1.- hanning_x
+        compl_conjugate_x *= hanning_x [:,None,None]
+        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2])
+        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2])
+        FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
+        first_x=dim[0]-last_x
+        compl_conjugate_x = 0 # free memory
+    elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
+        npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)       
+        compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1] # reverse array
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+        hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
+        hanning_x = hanning_x [::-1] #reverse array
+        FIDdata[last_x+1-npoints_x:dim[0],:,:] *= hanning_x [:,None,None]
+        hanning_x = 1.- hanning_x
+        compl_conjugate_x *= hanning_x [:,None,None]
+        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2])
+        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2])
+        FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
+        last_x=dim[0]-first_x
+        compl_conjugate_x = 0 # free memory     
+    if percentual_inc_z>min_percentual: # dimension 2 points missing at the beginning
+        npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)  
+        compl_conjugate_z = np.conj(FIDdata[:,:,dim[2]-first_z-npoints_z:dim[2]])
+        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1] # reverse array
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
+        hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
+        y_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+        hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(y_),2)
+        FIDdata[:,:,1:first_z+1+npoints_z] *= hanning_z [None,None,:]
+        hanning_z = 1.- hanning_z
+        compl_conjugate_z *= hanning_z [None,None,:]
+        FIDdata[:,:,1:first_z+1+npoints_z] += compl_conjugate_z[:,:,:]
+        first_z=dim[2]-last_z
+        compl_conjugate_z = 0 # free memory         
+    elif -1.*percentual_inc_z>min_percentual: # dimension 2 points missing at the end
+        npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)        
+        compl_conjugate_z = np.conj(FIDdata[:,:,1:dim[2]-last_z+npoints_z])
+        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1] # reverse array
+        compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
+        hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
+        x_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+        hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(x_),2)
+        hanning_z = hanning_z [::-1] #reverse array
+        FIDdata[:,:,last_z+1-npoints_z:dim[2]] *= hanning_z [None,None,:]
+        hanning_z = 1.- hanning_z
+        compl_conjugate_z *= hanning_z [None,None,:]        
+        FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
+        last_z=dim[2]-first_z 
+        compl_conjugate_z = 0 # free memory
+    print('.', end='') #progress indicator 
+    
+#Hanning filter
+percentage = 10.
+npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
+hanning_x [first_x:first_x+npoints_x] = np.power(np.sin(x_),2)
+hanning_x [first_x+npoints_x:last_x-npoints_x+1] = 1
+x_ = x_[::-1] # reverse x_
+hanning_x [last_x-npoints_x+1:last_x+1] = np.power(np.sin(x_),2)
+#print (hanning_x)
+FIDdata[:,:,:] *= hanning_x [:,None,None]
+npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
+hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
+z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
+hanning_z [first_z:first_z+npoints_z] = np.power(np.sin(z_),2)
+hanning_z [first_z+npoints_z:last_z-npoints_z+1] = 1
+z_ = z_[::-1] # reverse z_
+hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
+#print (hanning_z)
+FIDdata[:,:,:] *= hanning_z [None,None,:]
+print('.', end='') #progress indicator      
+
+#FFT
 IMGdata=FIDdata
 FIDdata = 0 #free memory 
-IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2)); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+IMGdata = np.fft.fftshift(IMGdata, axes=(0,2))
+IMGdata = FFT2D(IMGdata)
+IMGdata = np.fft.fftshift(IMGdata, axes=(0,2))          
 print('.', end='') #progress indicator
 
 #throw out antialiasing
@@ -466,13 +595,20 @@ aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
 aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
-NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
-NIFTIimg_ABS.header['sform_code']=1
-NIFTIimg_ABS.header['qform_code']=1
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_ABS.header.set_xyzt_units(3, 8)
+NIFTIimg_ABS.set_sform(aff, code=0)
+NIFTIimg_ABS.set_qform(aff, code=1)
+NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
+NIFTIimg_ABS_masked.header.set_xyzt_units(3, 8)
+NIFTIimg_ABS_masked.set_sform(aff, code=0)
+NIFTIimg_ABS_masked.set_qform(aff, code=1)
+NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
+NIFTIimg_PH.header.set_xyzt_units(3, 8)
+NIFTIimg_PH.set_sform(aff, code=0)
+NIFTIimg_PH.set_qform(aff, code=1)
 #write
 try:
     print('.', end='') #progress indicator

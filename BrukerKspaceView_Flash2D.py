@@ -160,9 +160,8 @@ if METHODdata["PVM_NSPacks"] != 1:
 if METHODdata["PVM_NRepetitions"] != 1:
     print ('ERROR: Recon only implemented 1 repetition'); 
     sys.exit(1)
-if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or \
-   METHODdata["PVM_EncZfAccel1"] != 1 or \
-   METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
+if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 or\
+   METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
 
@@ -186,14 +185,23 @@ else:
     sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]    
 
+#partial phase acquisition - add zeros
+if METHODdata["PVM_EncPftAccel1"] != 1:
+   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2]))
+   FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
+   dim=FIDrawdata_CPX.shape
+   
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
-for i in range(0,dim[2]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
+for i in range(0,order1.shape[0]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
-for i in range(0,dim[1]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+if dim[1]>1: # more than one slice
+   for i in range(0,order2.shape[0]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+else: # only one slice
+   FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
 FIDrawdata_CPX =  FIDdata
 FIDdata = 0 #free memory
