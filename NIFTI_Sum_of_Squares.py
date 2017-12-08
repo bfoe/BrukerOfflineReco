@@ -143,7 +143,7 @@ new_filename = new_filename[0:new_filename.rfind('_')]+'_SumOfSquares.nii.gz'
 nib.save(img_SoS, new_dirname+slash+new_filename)   
 #write logfile      
 with open(new_dirname+slash+'Logfile.txt', "w") as logfile:
-    logfile.write('Result fid file is the complex average of:\n')
+    logfile.write('Result fid file is the sum of squares of:\n')
     for i in range (0,nfiles):
        logfile.write(FIDfile[i]+'\n')
 print ("done\n")  
