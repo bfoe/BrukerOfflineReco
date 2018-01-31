@@ -140,13 +140,13 @@ def smooth(x,window_len):
     return y[window_len:-window_len+1]  
     
 def FFT2D (array):
-    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(0))
-    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(1))        
+    for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.fft(array[:,k,:,:], axis=(0))
+    for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.fft(array[:,k,:,:], axis=(1))        
     return array 
 
 def iFFT2D (array):
-    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(0))
-    for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(1))   
+    for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.ifft(array[:,k,:,:], axis=(0))
+    for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.ifft(array[:,k,:,:], axis=(1))   
     return array     
     
 #general initialization stuff  
@@ -205,9 +205,6 @@ if  not(METHODdata["Method"] == "FLASH" or METHODdata["Method"] == "FISP") or ME
 if METHODdata["PVM_NSPacks"] != 1:
     print ('ERROR: Recon only implemented 1 package'); 
     sys.exit(1) 
-if METHODdata["PVM_NRepetitions"] != 1:
-    print ('ERROR: Recon only implemented 1 repetition'); 
-    sys.exit(1)
 if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 or\
    METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
@@ -218,39 +215,40 @@ print ('Starting recon')
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
+repetitions=METHODdata["PVM_NRepetitions"]
 dim=METHODdata["PVM_EncMatrix"]
 dim0 = dim[0]; dim0_mod_128 = dim0%128
 if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
 if  METHODdata["Method"] == "FLASH":
-    dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
+    dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1],repetitions]# insert slice dimension  and repetitions
+    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2],dim[3], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 elif METHODdata["Method"] == "FISP":
-    dim=[dim[0],dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
-    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
+    dim=[dim[0],dim[1],METHODdata["PVM_SPackArrNSlices"],repetitions]# insert slice dimension and repetitions
+    try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2],dim[3], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
-    FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,1))
+    FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,1,3))
     dim = FIDrawdata_CPX.shape
 else:
     print ('Error: unknown method',METHODdata["Method"])
     sys.exit(1)
-if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:]  
+if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]  
   
 #partial phase acquisition - add zeros
 if METHODdata["PVM_EncPftAccel1"] != 1:
-   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2]))
+   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2],dim[3]))
    FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
    dim=FIDrawdata_CPX.shape
    
 #reorder data
-FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
-FIDdata=np.empty(shape=(dim[0],dim[1],dim[2]),dtype=np.complex64)
+FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
+FIDdata=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[2]/2                             
-for i in range(0,order1.shape[0]): FIDdata_tmp[:,:,order1[i]]=FIDrawdata_CPX[:,:,i]
+for i in range(0,order1.shape[0]): FIDdata_tmp[:,:,order1[i],:]=FIDrawdata_CPX[:,:,i,:]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
 if dim[1]>1: # more than one slice
-   for i in range(0,order2.shape[0]): FIDdata[:,order2[i],:]=FIDdata_tmp[:,i,:]
+   for i in range(0,order2.shape[0]): FIDdata[:,order2[i],:,:]=FIDdata_tmp[:,i,:,:]
 else: # only one slice
    FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
@@ -260,9 +258,9 @@ print('.', end='') #progress indicator
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
 realFOV = METHODdata["PVM_Fov"]*METHODdata["PVM_AntiAlias"]
 phase_step1 = +2.*np.pi*float(PackArrPhase1Offset)/float(realFOV[1])
-mag = np.abs(FIDdata[:,:,:]); ph = np.angle(FIDdata[:,:,:])
-for i in range(0,FIDdata.shape[2]): ph[:,:,i] -= float(i-int(FIDdata.shape[2]/2))*phase_step1
-FIDdata [:,:,:] = mag * np.exp(1j*ph)
+mag = np.abs(FIDdata[:,:,:,:]); ph = np.angle(FIDdata[:,:,:,:])
+for i in range(0,FIDdata.shape[2]): ph[:,:,i,:] -= float(i-int(FIDdata.shape[2]/2))*phase_step1
+FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
 #zero fill
@@ -272,11 +270,11 @@ res1=METHODdata["PVM_SPackArrSliceDistance"]
 if dim[1]<=1: res1=METHODdata["PVM_SliceThick"] # only one slice
 SpatResol=[SpatResol[0],res1,SpatResol[1]]# insert slice dimension
 FIDdata_ZF = np.zeros(shape=(int(dim[0]*zero_fill),dim[1],
-                             int(dim[2]*zero_fill)),dtype=np.complex64)
+                             int(dim[2]*zero_fill),dim[3]),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
-FIDdata_ZF[dim0start:dim0start+dim[0],:,dim2start:dim2start+dim[2]] = \
-    FIDdata[0:dim[0],:,0:dim[2]]
+FIDdata_ZF[dim0start:dim0start+dim[0],:,dim2start:dim2start+dim[2],:] = \
+    FIDdata[0:dim[0],:,0:dim[2],:]
 FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory 
 dim=FIDdata.shape
@@ -305,17 +303,17 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
     #low pass filter for phase correction (function: 1-hanning^2)
     percentage = 10 # center only (lowpass)
     FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
-    FIDlowpass [:,:,:] = FIDdata [:,:,:]
+    FIDlowpass [:,:,:,:] = FIDdata [:,:,:,:]
     npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
     hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
     x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
     hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
-    FIDlowpass[:,:,:] *= hanning_x [:,None,None]
+    FIDlowpass[:,:,:,:] *= hanning_x [:,None,None,None]
     npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
     hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
     z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
     hanning_z [int(dim[2]/2)-npoints_z:int(dim[2]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
-    FIDlowpass[:,:,:] *= hanning_z [None,None,:]
+    FIDlowpass[:,:,:,:] *= hanning_z [None,None,:,None]
     print('.', end='') #progress indicator
     #FFT lowpass data
     FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,2))
@@ -338,64 +336,64 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
     percentage = 5 # mix conjugate with original
     if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning        
         npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
-        compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:])
-        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1] # reverse array
+        compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1,:] # reverse array
         compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
         hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
         x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
         hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
-        FIDdata[1:first_x+1+npoints_x,:,:] *= hanning_x [:,None,None]
+        FIDdata[1:first_x+1+npoints_x,:,:,:] *= hanning_x [:,None,None,None]
         hanning_x = 1.- hanning_x
-        compl_conjugate_x *= hanning_x [:,None,None]
+        compl_conjugate_x *= hanning_x [:,None,None,None]
         #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2])
         #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2])
-        FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
+        FIDdata[1:first_x+1+npoints_x,:,:,:] += compl_conjugate_x[:,:,:,:]
         first_x=dim[0]-last_x
         compl_conjugate_x = 0 # free memory
     elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
         npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)       
-        compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:])
-        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1] # reverse array
+        compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:,:])
+        compl_conjugate_x = compl_conjugate_x[::-1,:,::-1,:] # reverse array
         compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
         hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
         x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
         hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
         hanning_x = hanning_x [::-1] #reverse array
-        FIDdata[last_x+1-npoints_x:dim[0],:,:] *= hanning_x [:,None,None]
+        FIDdata[last_x+1-npoints_x:dim[0],:,:,:] *= hanning_x [:,None,None,None]
         hanning_x = 1.- hanning_x
-        compl_conjugate_x *= hanning_x [:,None,None]
+        compl_conjugate_x *= hanning_x [:,None,None,None]
         #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2])
         #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2])
-        FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
+        FIDdata[last_x+1-npoints_x:dim[0],:,:,:] += compl_conjugate_x[:,:,:,:]       
         last_x=dim[0]-first_x
         compl_conjugate_x = 0 # free memory     
     if percentual_inc_z>min_percentual: # dimension 2 points missing at the beginning
         npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)  
-        compl_conjugate_z = np.conj(FIDdata[:,:,dim[2]-first_z-npoints_z:dim[2]])
-        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1] # reverse array
+        compl_conjugate_z = np.conj(FIDdata[:,:,dim[2]-first_z-npoints_z:dim[2],:])
+        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1,:] # reverse array
         compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
         hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
         y_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
         hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(y_),2)
-        FIDdata[:,:,1:first_z+1+npoints_z] *= hanning_z [None,None,:]
+        FIDdata[:,:,1:first_z+1+npoints_z,:] *= hanning_z [None,None,:,None]
         hanning_z = 1.- hanning_z
-        compl_conjugate_z *= hanning_z [None,None,:]
-        FIDdata[:,:,1:first_z+1+npoints_z] += compl_conjugate_z[:,:,:]
+        compl_conjugate_z *= hanning_z [None,None,:,None]
+        FIDdata[:,:,1:first_z+1+npoints_z,:] += compl_conjugate_z[:,:,:,:]
         first_z=dim[2]-last_z
         compl_conjugate_z = 0 # free memory         
     elif -1.*percentual_inc_z>min_percentual: # dimension 2 points missing at the end
         npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)        
-        compl_conjugate_z = np.conj(FIDdata[:,:,1:dim[2]-last_z+npoints_z])
-        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1] # reverse array
+        compl_conjugate_z = np.conj(FIDdata[:,:,1:dim[2]-last_z+npoints_z,:])
+        compl_conjugate_z = compl_conjugate_z[::-1,:,::-1,:] # reverse array
         compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
         hanning_z = np.zeros(shape=(compl_conjugate_z.shape[2]),dtype=np.float32)
         x_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
         hanning_z [compl_conjugate_z.shape[2]-npoints_z:compl_conjugate_z.shape[2]] = np.power(np.sin(x_),2)
         hanning_z = hanning_z [::-1] #reverse array
-        FIDdata[:,:,last_z+1-npoints_z:dim[2]] *= hanning_z [None,None,:]
+        FIDdata[:,:,last_z+1-npoints_z:dim[2],:] *= hanning_z [None,None,:,None]
         hanning_z = 1.- hanning_z
-        compl_conjugate_z *= hanning_z [None,None,:]        
-        FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
+        compl_conjugate_z *= hanning_z [None,None,:,None]        
+        FIDdata[:,:,last_z+1-npoints_z:dim[2],:] += compl_conjugate_z[:,:,:,:]       
         last_z=dim[2]-first_z 
         compl_conjugate_z = 0 # free memory
     print('.', end='') #progress indicator 
@@ -410,7 +408,7 @@ hanning_x [first_x+npoints_x:last_x-npoints_x+1] = 1
 x_ = x_[::-1] # reverse x_
 hanning_x [last_x-npoints_x+1:last_x+1] = np.power(np.sin(x_),2)
 #print (hanning_x.shape, hanning_x)
-FIDdata[:,:,:] *= hanning_x [:,None,None]
+FIDdata[:,:,:,:] *= hanning_x [:,None,None,None]
 npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
 hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
 z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
@@ -419,7 +417,7 @@ hanning_z [first_z+npoints_z:last_z-npoints_z+1] = 1
 z_ = z_[::-1] # reverse z_
 hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
 #print (hanning_z.shape, hanning_z)
-FIDdata[:,:,:] *= hanning_z [None,None,:]
+FIDdata[:,:,:,:] *= hanning_z [None,None,:,None]
 print('.', end='') #progress indicator      
 
 #FFT
@@ -436,7 +434,7 @@ dim0start=int((dim[0]-dim[0]/crop[0])/2)
 dim2start=int((dim[2]-dim[2]/crop[1])/2)
 dim0end = int(dim0start+dim[0]/crop[0])
 dim2end = int(dim2start+dim[2]/crop[1])
-IMGdata = IMGdata[dim0start:dim0end,:,dim2start:dim2end]
+IMGdata = IMGdata[dim0start:dim0end,:,dim2start:dim2end,:]
 print('.', end='') #progress indicator
 
 #permute dimensions
@@ -447,7 +445,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial":
     SpatResol_perm[0]=SpatResol[0]
     SpatResol_perm[1]=SpatResol[2]
     SpatResol_perm[2]=SpatResol[1]
-    IMGdata = np.transpose (IMGdata, axes=(0,2,1))
+    IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))
     temp=SpatResol_perm[0]
     SpatResol_perm[0]=SpatResol_perm[1]
     SpatResol_perm[1]=temp
@@ -457,7 +455,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         SpatResol_perm[1]=temp
         IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (axial A_P)
     elif METHODdata["PVM_SPackArrReadOrient"] == "L_R":
-        IMGdata = IMGdata[::-1,:,:] # flip axis (axial L_R)
+        IMGdata = IMGdata[::-1,:,:,:] # flip axis (axial L_R)
     else:
         SpatResol_perm=SpatResol    
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
@@ -469,8 +467,8 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
         SpatResol_perm[0]=SpatResol[0]
         SpatResol_perm[1]=SpatResol[2]
         SpatResol_perm[2]=SpatResol[1]    
-        IMGdata = np.transpose (IMGdata, axes=(0,2,1))
-        IMGdata = IMGdata[::-1,:,:] # flip axis
+        IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))
+        IMGdata = IMGdata[::-1,:,:,:] # flip axis
     else:
         SpatResol_perm=SpatResol
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
@@ -519,35 +517,35 @@ std=np.empty(shape=8,dtype=np.float)
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[0]=np.mean(arr)
 std[0]=np.std(arr)
 tresh[0]=avg[0] + 4*std[0]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[1]=np.mean(arr)
 std[1]=np.std(arr)
 tresh[1]=avg[1] + 4*std[1]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[2]=np.mean(arr)
 std[2]=np.std(arr)
 tresh[2]=avg[2] + 4*std[2]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[3]=np.mean(arr)
 std[3]=np.std(arr)
 tresh[3]=avg[3] + 4*std[3]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[4]=np.mean(arr)
 std[4]=np.std(arr)
 tresh[4]=avg[4] + 4*std[4]
@@ -561,20 +559,28 @@ tresh[5]=avg[5] + 4*std[5]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[6]=np.mean(arr)
 std[6]=np.std(arr)
 tresh[6]=avg[6] + 4*std[6]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[7]=np.mean(arr)
 std[7]=np.std(arr)
 tresh[7]=avg[7] + 4*std[7]
 threshold=np.min(tresh)
-mask =  abs(IMGdata [:,:,:]) > threshold
+mask =  abs(IMGdata [:,:,:,:]) > threshold
 
+# calculate phase difference
+if repetitions > 1:
+   IMGdata_rawPH = np.zeros(shape=IMGdata.shape,dtype=np.complex64)
+   for i in range(0,dim[3]): 
+      IMGdata_rawPH[:,:,:,i] = IMGdata[:,:,:,i]/IMGdata[:,:,:,0]
+else:
+   IMGdata_rawPH = IMGdata
+      
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
 IMGdata_ABS = np.abs(IMGdata)/ReceiverGain; 
@@ -582,8 +588,7 @@ max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-#IMGdata_PH  = np.angle(IMGdata)
-IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
+IMGdata_PH  = np.angle(IMGdata_rawPH)*mask; # use this to mask out background noise
 max_PH = np.pi; 
 IMGdata_PH *= 32767./max_PH
 IMGdata_PH = IMGdata_PH.astype(np.int16)
