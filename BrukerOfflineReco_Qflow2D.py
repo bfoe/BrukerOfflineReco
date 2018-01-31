@@ -278,7 +278,7 @@ SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 res1=METHODdata["PVM_SPackArrSliceDistance"]
 if dim[1]<=1: res1=METHODdata["PVM_SliceThick"] # only one slice
 SpatResol=[SpatResol[0],res1,SpatResol[1]]# insert slice dimension
-FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),2,dim[1],
+FIDdata_ZF = np.zeros(shape=(int(dim[0]*zero_fill),2,dim[1],
                              int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
@@ -401,56 +401,56 @@ avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
 xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
 ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
-zstart=0; zend=int(ceil(IMGdata_decoded_ABS.shape[3]/N))
+zstart=0; zend=int(ceil(float(IMGdata_decoded_ABS.shape[3])/float(N)))
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[0]=np.mean(arr)
 std[0]=np.std(arr)
 tresh[0]=avg[0] + std_fac*std[0]
 xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
 ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
-zstart=0; zend=int(ceil(IMGdata_decoded_ABS.shape[3]/N))
+zstart=0; zend=int(ceil(float(IMGdata_decoded_ABS.shape[3])/float(N)))
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[1]=np.mean(arr)
 std[1]=np.std(arr)
 tresh[1]=avg[1] + std_fac*std[1]
 xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
 ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
-zstart=0; zend=int(ceil(IMGdata_decoded_ABS.shape[3]/N))
+zstart=0; zend=int(ceil(float(IMGdata_decoded_ABS.shape[3])/float(N)))
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[2]=np.mean(arr)
 std[2]=np.std(arr)
 tresh[2]=avg[2] + std_fac*std[2]
 xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
 ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
-zstart=0; zend=int(ceil(IMGdata_decoded_ABS.shape[3]/N))
+zstart=0; zend=int(ceil(float(IMGdata_decoded_ABS.shape[3])/float(N)))
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[3]=np.mean(arr)
 std[3]=np.std(arr)
 tresh[3]=avg[3] + std_fac*std[3]
 xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
 ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
-zstart=int(floor(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[2]/N)); zend=IMGdata_decoded_ABS.shape[3]
+zstart=int(floor(float(IMGdata_decoded_ABS.shape[3])-float(IMGdata_decoded_ABS.shape[2])/float(N))); zend=IMGdata_decoded_ABS.shape[3]
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[4]=np.mean(arr)
 std[4]=np.std(arr)
 tresh[4]=avg[4] + std_fac*std[4]
 xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
 ystart=0; yend=int(IMGdata_decoded_ABS.shape[2]/N)
-zstart=int(floor(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N)); zend=IMGdata_decoded_ABS.shape[3]
+zstart=int(floor(float(IMGdata_decoded_ABS.shape[3])-float(IMGdata_decoded_ABS.shape[2])/float(N))); zend=IMGdata_decoded_ABS.shape[3]
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[5]=np.mean(arr)
 std[5]=np.std(arr)
 tresh[5]=avg[5] + std_fac*std[5]
 xstart=0; xend=int(IMGdata_decoded_ABS.shape[0]/N)
 ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
-zstart=int(floor(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N)); zend=IMGdata_decoded_ABS.shape[3]
+zstart=int(floor(float(IMGdata_decoded_ABS.shape[3])-float(IMGdata_decoded_ABS.shape[2])/float(N))); zend=IMGdata_decoded_ABS.shape[3]
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[6]=np.mean(arr)
 std[6]=np.std(arr)
 tresh[6]=avg[6] + std_fac*std[6]
 xstart=int(IMGdata_decoded_ABS.shape[0]-IMGdata_decoded_ABS.shape[0]/N); xend=IMGdata_decoded_ABS.shape[0]
 ystart=int(IMGdata_decoded_ABS.shape[2]-IMGdata_decoded_ABS.shape[2]/N); yend=IMGdata_decoded_ABS.shape[2]
-zstart=int(floor(IMGdata_decoded_ABS.shape[3]-IMGdata_decoded_ABS.shape[3]/N)); zend=IMGdata_decoded_ABS.shape[3]
+zstart=int(floor(float(IMGdata_decoded_ABS.shape[3])-float(IMGdata_decoded_ABS.shape[2])/float(N))); zend=IMGdata_decoded_ABS.shape[3]
 arr=IMGdata_decoded_ABS[xstart:xend,image_number,ystart:yend,zstart:zend]
 avg[7]=np.mean(arr)
 std[7]=np.std(arr)

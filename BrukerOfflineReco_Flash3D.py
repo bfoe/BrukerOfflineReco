@@ -270,7 +270,7 @@ print('.', end='') #progress indicator
 #zero fill
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
-FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),int(dim[1]*zero_fill),
+FIDdata_ZF = np.zeros(shape=(int(dim[0]*zero_fill),int(dim[1]*zero_fill),
                              int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim1start=int(dim[1]*(zero_fill-1)/2)

@@ -222,11 +222,11 @@ dim=METHODdata["PVM_EncMatrix"]
 dim0 = dim[0]; dim0_mod_128 = dim0%128
 if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
 if  METHODdata["Method"] == "FLASH":
-    dim=[dim0,METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
+    dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim[1]]# insert slice dimension
     try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 elif METHODdata["Method"] == "FISP":
-    dim=[dim0,dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
+    dim=[dim[0],dim[1],METHODdata["PVM_SPackArrNSlices"]]# insert slice dimension
     try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2], order="F")
     except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
     FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,1))
@@ -271,7 +271,7 @@ SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 res1=METHODdata["PVM_SPackArrSliceDistance"]
 if dim[1]<=1: res1=METHODdata["PVM_SliceThick"] # only one slice
 SpatResol=[SpatResol[0],res1,SpatResol[1]]# insert slice dimension
-FIDdata_ZF = np.empty(shape=(int(dim[0]*zero_fill),dim[1],
+FIDdata_ZF = np.zeros(shape=(int(dim[0]*zero_fill),dim[1],
                              int(dim[2]*zero_fill)),dtype=np.complex64)
 dim0start=int(dim[0]*(zero_fill-1)/2)
 dim2start=int(dim[2]*(zero_fill-1)/2)
@@ -399,7 +399,7 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
         last_z=dim[2]-first_z 
         compl_conjugate_z = 0 # free memory
     print('.', end='') #progress indicator 
-    
+  
 #Hanning filter
 percentage = 10.
 npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
@@ -409,7 +409,7 @@ hanning_x [first_x:first_x+npoints_x] = np.power(np.sin(x_),2)
 hanning_x [first_x+npoints_x:last_x-npoints_x+1] = 1
 x_ = x_[::-1] # reverse x_
 hanning_x [last_x-npoints_x+1:last_x+1] = np.power(np.sin(x_),2)
-#print (hanning_x)
+#print (hanning_x.shape, hanning_x)
 FIDdata[:,:,:] *= hanning_x [:,None,None]
 npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
 hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
@@ -418,7 +418,7 @@ hanning_z [first_z:first_z+npoints_z] = np.power(np.sin(z_),2)
 hanning_z [first_z+npoints_z:last_z-npoints_z+1] = 1
 z_ = z_[::-1] # reverse z_
 hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
-#print (hanning_z)
+#print (hanning_z.shape, hanning_z)
 FIDdata[:,:,:] *= hanning_z [None,None,:]
 print('.', end='') #progress indicator      
 
@@ -518,56 +518,56 @@ avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[0]=np.mean(arr)
 std[0]=np.std(arr)
 tresh[0]=avg[0] + 4*std[0]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[1]=np.mean(arr)
 std[1]=np.std(arr)
 tresh[1]=avg[1] + 4*std[1]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[2]=np.mean(arr)
 std[2]=np.std(arr)
 tresh[2]=avg[2] + 4*std[2]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=0; zend=int(ceil(IMGdata.shape[2]/N))
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[3]=np.mean(arr)
 std[3]=np.std(arr)
 tresh[3]=avg[3] + 4*std[3]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[4]=np.mean(arr)
 std[4]=np.std(arr)
 tresh[4]=avg[4] + 4*std[4]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[5]=np.mean(arr)
 std[5]=np.std(arr)
 tresh[5]=avg[5] + 4*std[5]
 xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[6]=np.mean(arr)
 std[6]=np.std(arr)
 tresh[6]=avg[6] + 4*std[6]
 xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
 ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=int(floor(IMGdata.shape[2]-IMGdata.shape[2]/N)); zend=IMGdata.shape[2]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[7]=np.mean(arr)
 std[7]=np.std(arr)
