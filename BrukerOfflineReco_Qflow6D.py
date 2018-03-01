@@ -488,7 +488,7 @@ print('.', end='') #progress indicator
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
 # use noise in all 8 corners to establish threshold
-image_number = 4 # 0 is static, 4 is flow
+image_number = 0 # 0 is static, 4 is flow
 N=10 # use 10% at the corners of the FOV
 std_fac = 6 # how many standard deviations to add
 tresh=np.empty(shape=8,dtype=np.float)
@@ -638,6 +638,17 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPack
             flowvol /= 1000. # convert mm^3/s ---> ml/s
             text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
         text_file.write("\n")
+elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
+    with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Flow Volumes per slice (X):\n")
+        for i in range(0,IMGdata_decoded_PH.shape[2]): # in our data shape[2] is the main flow direction
+            flowvol = np.sum(IMGdata_decoded_PH[:,2,i,:])
+            flowvol *= 10.*venc/32767. # venc is in cm/s, multiply by 10. to get this in mm/s
+            flowvol *= SpatResol_perm[0]*SpatResol_perm[2] # multiply with inplane spatial resolution, result is in mm^3/s
+            flowvol /= 1000. # convert mm^3/s ---> ml/s
+            text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
+        text_file.write("\n") 
+        print ('Warning: textfile with flow values may need checking');                
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:    
         text_file.write("Flow Volumes per slice (X):\n")
