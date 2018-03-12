@@ -435,6 +435,15 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPack
     IMGdata_decoded_ABS = np.rot90(IMGdata_decoded_ABS, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
     IMGdata_decoded_PH = np.transpose (IMGdata_decoded_PH, axes=(2,1,0,3))
     IMGdata_decoded_PH = np.rot90(IMGdata_decoded_PH, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
+elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
+    SpatResol_perm = np.empty(shape=(3))
+    SpatResol_perm[0]=SpatResol[0]
+    SpatResol_perm[1]=SpatResol[1]
+    SpatResol_perm[2]=SpatResol[2]
+    IMGdata_decoded_ABS = IMGdata_decoded_ABS[::-1,:,:,:] # reverse x  
+    IMGdata_decoded_ABS = IMGdata_decoded_ABS[:,:,:,::-1] # reverse y      
+    IMGdata_decoded_PH = IMGdata_decoded_PH[::-1,:,:,:] # reverse x  
+    IMGdata_decoded_PH = IMGdata_decoded_PH[:,:,:,::-1] # reverse y          
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
     SpatResol_perm = np.empty(shape=(3))
     SpatResol_perm[0]=SpatResol[1]
@@ -488,7 +497,7 @@ print('.', end='') #progress indicator
 #pylab.show(block=False); os.system("pause"); pylab.close(); 
 
 # use noise in all 8 corners to establish threshold
-image_number = 0 # 0 is static, 4 is flow
+image_number = 4 # 0 is static, 4 is flow
 N=10 # use 10% at the corners of the FOV
 std_fac = 6 # how many standard deviations to add
 tresh=np.empty(shape=8,dtype=np.float)
@@ -647,8 +656,7 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPa
             flowvol *= SpatResol_perm[0]*SpatResol_perm[2] # multiply with inplane spatial resolution, result is in mm^3/s
             flowvol /= 1000. # convert mm^3/s ---> ml/s
             text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
-        text_file.write("\n") 
-        print ('Warning: textfile with flow values may need checking');                
+        text_file.write("\n")               
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:    
         text_file.write("Flow Volumes per slice (X):\n")

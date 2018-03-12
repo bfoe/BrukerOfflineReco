@@ -504,6 +504,14 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
         SpatResol_perm[2]=SpatResol[2]
         IMGdata = np.transpose (IMGdata, axes=(1,0,2))
         IMGdata = np.rot90(IMGdata, k=2, axes=(0, 2)) # k=2 is a 180 degree rotation
+    elif METHODdata["PVM_SPackArrReadOrient"] == "A_P":    
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[0]
+        SpatResol_perm[1]=SpatResol[1]
+        SpatResol_perm[2]=SpatResol[2]   
+        #IMGdata = np.rot90(IMGdata, k=2, axes=(0, 2)) # k=2 is a 180 degree rotation
+        IMGdata = IMGdata [::-1,:,:] # reverse x  
+        IMGdata = IMGdata [:,:,::-1] # reverse y 
     else:
         SpatResol_perm=SpatResol    
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
