@@ -310,6 +310,7 @@ dim2start=int((dim[3]-dim[3]/crop[1])/2)
 dim0end = int(dim0start+dim[0]/crop[0])
 dim2end = int(dim2start+dim[3]/crop[1])
 IMGdata = IMGdata[dim0start:dim0end,:,:,dim2start:dim2end]
+dim=IMGdata.shape
 print('.', end='') #progress indicator
 
 #Phase offset correction

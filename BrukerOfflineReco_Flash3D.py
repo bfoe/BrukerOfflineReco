@@ -491,6 +491,7 @@ dim0end = int(dim0start+dim[0]/crop[0])
 dim1end = int(dim1start+dim[1]/crop[1])
 dim2end = int(dim2start+dim[2]/crop[2])
 IMGdata = IMGdata[dim0start:dim0end,dim1start:dim1end,dim2start:dim2end]
+dim=IMGdata.shape
 print('.', end='') #progress indicator
 
 #permute dimensions

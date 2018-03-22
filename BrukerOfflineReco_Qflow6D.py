@@ -359,9 +359,9 @@ dim0end = int(dim0start+dim[0]/crop[0])
 dim1end = int(dim1start+dim[1]/crop[1])
 dim2end = int(dim2start+dim[2]/crop[2])
 IMGdata = IMGdata[dim0start:dim0end,:,dim1start:dim1end,dim2start:dim2end]
-dim[0] /= int(crop[0])
-dim[1] /= int(crop[1])
-dim[2] /= int(crop[2])
+dim[0] = dim0end-dim0start
+dim[1] = dim1end-dim1start
+dim[2] = dim2end-dim2start
 print('.', end='') #progress indicator
 
 #Phase offset correction
