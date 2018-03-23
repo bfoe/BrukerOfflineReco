@@ -189,7 +189,9 @@ input_data2 = input_data2.astype(float)/float(ReceiverGain2)
 FIDdata = input_data1 - input_data2
 input_data1 = 0 # free memory
 input_data2 = 0 # free memory
-new_RG = int(floor(2147483647./np.amax(np.abs(FIDdata))))
+max_result = np.amax(np.abs(FIDdata))
+if max_result == 0: print ('ERROR: Result is zero (subtracting identical images ?)'); sys.exit(2)
+new_RG = int(floor(2147483647./max_result))
 if new_RG<1: new_RG=1
 FIDdata *= new_RG # to maintain maximum dynamic range
 FIDdata = FIDdata.astype(np.int32)
