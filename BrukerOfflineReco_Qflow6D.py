@@ -42,6 +42,12 @@ import os
 import numpy as np
 import nibabel as nib
 
+pyfftw_installed = True
+try: 
+    import pyfftw
+    test = pyfftw.interfaces.numpy_fft.fft(np.asarray([0,1,2,3]))
+except: pyfftw_installed = False
+
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
 except: 
@@ -145,6 +151,23 @@ def next_powerof_2(n):
     while n>list[i]: i += 1
     return (list[i])
 
+def FFT3D (array):
+    if pyfftw_installed: 
+       array = pyfftw.interfaces.numpy_fft.fftn(array, axes=(0,1,2))
+    else: 
+        for k in range(0,array.shape[1]): array[:,k,:] = np.fft.fft(array[:,k,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.fft(array[i,:,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.fft(array[i,:,:], axis=(1))          
+    return array 
+
+def iFFT3D (array):
+    if pyfftw_installed: 
+       array = pyfftw.interfaces.numpy_fft.ifftn(array, axes=(0,1,2))
+    else: 
+        for k in range(0,array.shape[1]): array[:,k,:] = np.fft.ifft(array[:,k,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(0))
+        for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(1))          
+    return array    
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -319,35 +342,15 @@ EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory
-Memory_OK=True
-try: dummy=np.empty(IMGdata.shape, dtype=np.complex128); dummy=0 # try to allocate more memory
-except: Memory_OK=False
-if Memory_OK:
-    IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=0); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=2); print('.', end='') #progress indicator
-    IMGdata = np.fft.fft(IMGdata, axis=3); print('.', end='') #progress indicator
-    IMGdata = np.fft.fftshift(IMGdata, axes=(0))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(2))
-    IMGdata = np.fft.fftshift(IMGdata, axes=(3))
-else: # for large datasets use loops
-    for k in range(0,IMGdata.shape[2]):
-        if k%30==0: print(',', end='') #progress indicator
-        IMGdata[:,:,k,:] = np.roll(IMGdata[:,:,k,:], -EchoPosition, axis=(0))
-        IMGdata[:,:,k,:] = np.fft.fft(IMGdata[:,:,k,:], axis=(0))
-        IMGdata[:,:,k,:] = np.fft.fftshift(IMGdata[:,:,k,:], axes=(0))
-    for i in range(0,IMGdata.shape[0]):
-        if i%30==0: print(',', end='') #progress indicator
-        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(1))
-        IMGdata[i,:,:,:] = np.fft.fft(IMGdata[i,:,:,:], axis=(1))
-        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(1))
-    for i in range(0,IMGdata.shape[0]):
-        if i%30==0: print(',', end='') #progress indicator
-        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(2))
-        IMGdata[i,:,:,:] = np.fft.fft(IMGdata[i,:,:,:], axis=(2))
-        IMGdata[i,:,:,:] = np.fft.fftshift(IMGdata[i,:,:,:], axes=(2))   
+IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
+for i in range(0,IMGdata.shape[1]):
+    IMGdata [:,i,:,:] = FFT3D(IMGdata[:,i,:,:])
+    print('.', end='') #progress indicator
+IMGdata = np.fft.fftshift(IMGdata, axes=(0))
+IMGdata = np.fft.fftshift(IMGdata, axes=(2))
+IMGdata = np.fft.fftshift(IMGdata, axes=(3))
 print('.', end='') #progress indicator
         
 #throw out antialiasing
