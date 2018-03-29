@@ -631,7 +631,7 @@ mask =  abs(IMGdata [:,:,:]) > threshold
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
 n_Averages = METHODdata["PVM_NAverages"]
-IMGdata_ABS = np.abs(IMGdata)/ReceiverGain*n_Averages; 
+IMGdata_ABS = np.abs(IMGdata)/ReceiverGain/n_Averages; 
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
