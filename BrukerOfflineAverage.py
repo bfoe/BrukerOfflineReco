@@ -226,6 +226,8 @@ with open(new_dirname+slash+'method', "w") as method_file:
     for i in range(0,len(method_data)):
        if method_data[i].startswith('$$ /') and method_data[i].endswith('/method\n'):
           method_data[i] = method_data[i][0:len(method_data[i])-8]+'_sum/method\n'
+       if method_data[i].startswith('##$PVM_NAverages'):
+          method_data[i] = '##$PVM_NAverages=1\n'
        method_file.write(method_data[i])
 #open/modify/write acqp file
 with open(os.path.dirname(FIDfile[0])+slash+'acqp')   as acqp_file:   
