@@ -568,7 +568,8 @@ mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
-IMGdata_decoded_ABS /= ReceiverGain; 
+n_Averages = METHODdata["PVM_NAverages"]
+IMGdata_decoded_ABS /= ReceiverGain*n_Averages; 
 max_ABS = np.amax(IMGdata_decoded_ABS);
 IMGdata_decoded_ABS *= 32767./max_ABS
 IMGdata_decoded_ABS = IMGdata_decoded_ABS.astype(np.int16)
@@ -577,8 +578,11 @@ IMGdata_decoded_PH [:,0,:,:] *= mask*32767./np.pi
 IMGdata_decoded_PH [:,1,:,:] *= mask*32767./np.pi
 IMGdata_decoded_PH [:,2,:,:] *= mask*32767./np.pi
 IMGdata_decoded_PH [:,3,:,:] *= mask*32767./np.pi
-IMGdata_decoded_PH [:,4,:,:] *= mask*32767./(np.sqrt(np.power(np.pi,2)*3)) # 5.44
+IMGdata_decoded_PH [:,4,:,:] *= mask*32767./(np.sqrt(np.square(np.pi)*3.)) # 5.44
 IMGdata_decoded_PH = IMGdata_decoded_PH.astype(np.int16)
+# set max/min in 0,0,0/1,1,1 corners (this save the venc parameterin the image)
+IMGdata_decoded_PH [0,:,0,0] = 32767
+IMGdata_decoded_PH [1,:,1,1] = -32767  
 print('.', end='') #progress indicator
 
 #createNIFTI's

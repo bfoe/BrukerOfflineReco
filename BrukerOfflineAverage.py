@@ -179,6 +179,13 @@ TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
+#read n_Averages from method files
+n_Averages=np.empty(shape=(nfiles),dtype=int)
+for i in range (0,nfiles):
+   METHODfile = os.path.dirname(FIDfile[i])+slash+'method'
+   METHODdata = ReadParamFile(METHODfile)
+   n_Averages[i]=METHODdata["PVM_NAverages"]
+
 #read ReceiverGain from acqp files
 ReceiverGain=np.empty(shape=(nfiles),dtype=int)
 for i in range (0,nfiles):
@@ -191,7 +198,7 @@ FIDdata=0
 for i in range (0,nfiles):
     print ("Reading file", i)
     with open(FIDfile[i], "r") as f: input_data= np.fromfile(f, dtype=np.int32) 
-    input_data = input_data.astype(float)/float(ReceiverGain[i])
+    input_data = input_data.astype(float)/float(ReceiverGain[i])/float(n_Averages[i])
     FIDdata += input_data
 input_data = 0 # free memory
 FIDdata /= nfiles

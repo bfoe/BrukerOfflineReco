@@ -170,6 +170,14 @@ TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
+#read n_Averages from method files
+METHODfile1 = os.path.dirname(FIDfile1)+slash+'method'
+METHODdata1 = ReadParamFile(METHODfile1)
+n_Averages1=METHODdata1["PVM_NAverages"]
+METHODfile2 = os.path.dirname(FIDfile2)+slash+'method'
+METHODdata2 = ReadParamFile(METHODfile2)
+n_Averages2=METHODdata2["PVM_NAverages"]
+
 #read ReceiverGain from acqp files
 ACQPfile1 = os.path.dirname(FIDfile1)+slash+'acqp'
 ACQPdata1 = ReadParamFile(ACQPfile1)
@@ -182,10 +190,10 @@ ReceiverGain2=ACQPdata2["RG"]
 FIDdata=0
 print ("Reading file 1")
 with open(FIDfile1, "r") as f: input_data1= np.fromfile(f, dtype=np.int32) 
-input_data1 = input_data1.astype(float)/float(ReceiverGain1)
+input_data1 = input_data1.astype(float)/float(ReceiverGain1)/float(n_Averages1)
 print ("Reading file 2")
 with open(FIDfile2, "r") as f: input_data2= np.fromfile(f, dtype=np.int32) 
-input_data2 = input_data2.astype(float)/float(ReceiverGain2)
+input_data2 = input_data2.astype(float)/float(ReceiverGain2)/float(n_Averages2)
 FIDdata = input_data1 - input_data2
 input_data1 = 0 # free memory
 input_data2 = 0 # free memory

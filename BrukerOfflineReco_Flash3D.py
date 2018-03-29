@@ -630,7 +630,8 @@ mask =  abs(IMGdata [:,:,:]) > threshold
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
-IMGdata_ABS = np.abs(IMGdata)/ReceiverGain; 
+n_Averages = METHODdata["PVM_NAverages"]
+IMGdata_ABS = np.abs(IMGdata)/ReceiverGain*n_Averages; 
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
@@ -639,6 +640,9 @@ IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
 max_PH = np.pi; 
 IMGdata_PH *= 32767./max_PH
 IMGdata_PH = IMGdata_PH.astype(np.int16)
+# set max/min in 0,0,0/1,1,1 corners (this save the venc parameterin the image)
+IMGdata_PH [0,0,0] = 32767
+IMGdata_PH [1,1,1] = -32767  
 print('.', end='') #progress indicator
 IMGdata=0 # free memory
 
