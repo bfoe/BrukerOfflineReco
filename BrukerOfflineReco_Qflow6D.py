@@ -582,7 +582,7 @@ IMGdata_decoded_PH [:,4,:,:] *= mask*32767./(np.sqrt(np.square(np.pi)*3.)) # 5.4
 IMGdata_decoded_PH = IMGdata_decoded_PH.astype(np.int16)
 # set max/min in 0,0,0/1,1,1 corners (this save the venc parameterin the image)
 IMGdata_decoded_PH [0,:,0,0] = 32767
-IMGdata_decoded_PH [1,:,1,1] = -32767  
+IMGdata_decoded_PH [1,0:3,1,1] = -32767  
 print('.', end='') #progress indicator
 
 #createNIFTI's
