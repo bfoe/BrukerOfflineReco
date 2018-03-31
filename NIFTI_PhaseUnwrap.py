@@ -164,35 +164,43 @@ while i<PhUnwrap_combinations.shape[0]:
             if np.abs(PhUnwrap_combinations[i,file_nr])<np.abs(PhUnwrap_combinations[i,file_nr+1]): remove = True
     if remove: PhUnwrap_combinations = np.delete (PhUnwrap_combinations, i, axis=(0))
     else: i +=1
+print('.', end='') #progress indicator
     
 #PhaseUnwrap
-Img_PH_flow = np.zeros (shape=(IMGdata_decoded_PH.shape[0],IMGdata_decoded_PH.shape[1],IMGdata_decoded_PH.shape[2]),dtype=np.float32)  
-for x in range (0, Img_PH_flow.shape[0]):
-   if x%4 == 0: print('.', end='') #progress indicator
-   for y in range (0, Img_PH_flow.shape[1]):
-     for z in range (0, Img_PH_flow.shape[2]):
-        nz = np.nonzero (mask[x,y,z,:].astype(int))
-        local_nfiles = np.asarray(nz).shape[1]
-        if   local_nfiles == 0: Img_PH_flow [x,y,z] = 0
-        elif local_nfiles == 1: IMGdata_decoded_PH[x,y,z,nz]
-        else:      
-           local_combinations=np.unique(PhUnwrap_combinations[:,nz], axis=(0))
-           local_combinations=local_combinations.reshape((local_combinations.shape[0],local_nfiles)) #eliminate an empty dimension
-           local_max_venc = np.amax(venc_arr[nz])
-           index_local_max_venc = np.argmax(venc_arr[nz])
-           i=0
-           while i<local_combinations.shape[0]:
-               if local_combinations[i,index_local_max_venc] != 0:
-                   local_combinations = np.delete (local_combinations, i, axis=(0))
-               else: i +=1              
-           local_n_combinations=local_combinations.shape[0]
-           PhUnwrap_try = np.zeros (shape=(local_n_combinations,local_nfiles),dtype=np.float32)           
-           for i in range (0,local_n_combinations):
-              PhUnwrap_try[i,:] = IMGdata_decoded_PH[x,y,z,nz]+local_combinations[i,:]            
-           avg = np.average (PhUnwrap_try[:,:],axis=(1))
-           chi = np.sqrt(np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1)))/local_nfiles   
-           min_chi_index = np.argmin (chi)
-           Img_PH_flow [x,y,z] = avg[min_chi_index]
+dim = IMGdata_decoded_PH.shape;
+#flaten vectors
+mask = mask.reshape (dim[0]*dim[1]*dim[2],dim[3]); print('.', end='') #progress indicator
+IMGdata_decoded_PH = IMGdata_decoded_PH.reshape (dim[0]*dim[1]*dim[2],dim[3]); print('.', end='') #progress indicator
+Img_PH_flow = np.zeros (shape=(dim[0]*dim[1]*dim[2]),dtype=np.float32);
+#reduce vectors to nonzero elements
+all_nonzero = np.nonzero(np.logical_or.reduce (mask,1))[0] # find all elements that have a non zero value in any file
+mask_NZ = mask[all_nonzero,:]
+IMGdata_decoded_PH_NZ = IMGdata_decoded_PH[all_nonzero,:]
+dim_reduced = IMGdata_decoded_PH_NZ.shape[0]
+Img_PH_flow_NZ = np.zeros (shape=(dim_reduced),dtype=np.float32)
+#start iteration 
+marker_each = int(dim_reduced/70) 
+for k in range (0, dim_reduced):
+   if k%marker_each == 0: print('.', end='') #progress indicator
+   nz = np.nonzero (mask_NZ[k,:].astype(int))[0]
+   local_nfiles = np.asarray(nz).shape[0]
+   if local_nfiles == 1: IMGdata_decoded_PH_NZ[k,nz]
+   else:   
+      local_combinations=np.unique(PhUnwrap_combinations[:,nz], axis=(0))
+      i=0
+      while i<local_combinations.shape[0]:
+          if local_combinations[i,np.argmax(venc_arr[nz])] != 0:
+              local_combinations = np.delete (local_combinations, i, axis=(0))
+          else: i +=1              
+      PhUnwrap_try = np.zeros (shape=(local_combinations.shape[0],local_nfiles),dtype=np.float32)           
+      for i in range (0,local_combinations.shape[0]):
+         PhUnwrap_try[i,:] = IMGdata_decoded_PH_NZ[k,nz]+local_combinations[i,:]            
+      avg = np.average (PhUnwrap_try[:,:],axis=(1))
+      chi = np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1))      
+      min_chi_index = np.argmin (chi)
+      Img_PH_flow_NZ [k] = avg[min_chi_index]
+Img_PH_flow[all_nonzero] = Img_PH_flow_NZ[:] # undo vector reduction   
+Img_PH_flow = Img_PH_flow.reshape (dim[0],dim[1],dim[2]) # undo flatten           
 print (' ')
 
 #transform to int
