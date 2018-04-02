@@ -168,7 +168,7 @@ print('.', end='') #progress indicator
     
 #PhaseUnwrap
 dim = IMGdata_decoded_PH.shape;
-#flaten vectors
+#flatten vectors
 mask = mask.reshape (dim[0]*dim[1]*dim[2],dim[3]); print('.', end='') #progress indicator
 IMGdata_decoded_PH = IMGdata_decoded_PH.reshape (dim[0]*dim[1]*dim[2],dim[3]); print('.', end='') #progress indicator
 Img_PH_flow = np.zeros (shape=(dim[0]*dim[1]*dim[2]),dtype=np.float32);
@@ -184,7 +184,7 @@ for k in range (0, dim_reduced):
    if k%marker_each == 0: print('.', end='') #progress indicator
    nz = np.nonzero (mask_NZ[k,:].astype(int))[0]
    local_nfiles = np.asarray(nz).shape[0]
-   if local_nfiles == 1: IMGdata_decoded_PH_NZ[k,nz]
+   if local_nfiles == 1: Img_PH_flow_NZ [k]=IMGdata_decoded_PH_NZ[k,nz]
    else:   
       local_combinations=np.unique(PhUnwrap_combinations[:,nz], axis=(0))
       i=0
@@ -230,7 +230,7 @@ img_SoS.set_sform(aff, code=0)
 img_SoS.set_qform(aff, code=1)
 img_SoS.header.set_slope_inter(Max_PH_flow/32767.,0)
 new_filename=os.path.basename(FIDfile[0])
-new_filename = new_filename[0:new_filename.rfind('_')]+'_PhaseUnwrap.nii.gz'
+new_filename = new_filename[0:new_filename.rfind('.nii.gz')]+'_PhaseUnwrap.nii.gz'
 nib.save(img_SoS, new_dirname+slash+new_filename)   
 #write logfile      
 with open(new_dirname+slash+'Logfile.txt', "w") as logfile:

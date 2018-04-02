@@ -112,7 +112,7 @@ for i in range (1,nfiles):
     data = np.square(data)
     data0 += data
 data=0 # free memory    
-data0 = np.sqrt(data0)/np.sqrt(nfiles)
+data0 = np.sqrt(data0)
 max_ = np.amax(data0)
 slope=max_/32767.
 data0 /= slope
