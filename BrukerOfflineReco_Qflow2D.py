@@ -194,8 +194,10 @@ METHODdata=ReadParamFile(METHODfile)
 #check for not implemented stuff
 if METHODdata["Method"] != "FLOWMAP" or METHODdata["FlowMode"] != "VelocityMapping":
     print ('ERROR: Recon only implemented for FLOWMAP VelocityMapping'); sys.exit(1)
-if METHODdata["PVM_SpatDimEnum"] != "2D" or METHODdata["FlowEncodingDirection"] != "SliceDirection":
-    print ('ERROR: Recon only implemented for 2D acquisition with flow incoding in slice direction'); sys.exit(1)
+if METHODdata["PVM_SpatDimEnum"] != "2D":
+    print ('ERROR: Recon only implemented for 2D acquisition'); sys.exit(1)
+if METHODdata["FlowEncodingDirection"] == "AllDirections":
+    print ('ERROR: Recon not implemented for flow incoding in all directions'); sys.exit(1)
 if METHODdata["FlowEncLoop"] !=2:
     print ('ERROR: ops, expected flow encoding loop = 2 '); sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
@@ -356,45 +358,23 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         IMGdata_decoded_PH  = IMGdata_decoded_PH [::-1,:,:,:] # flip axis (axial L_R)        
     else:
         SpatResol_perm = SpatResol
-        print ('Warning: unknown Readout Orientation',METHODdata["PVM_SPackArrReadOrient"]);
+        print ('Warning: unknown Readout Orientation',METHODdata["PVM_SPackArrSliceOrient"],METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
+if METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+    SpatResol_perm = np.empty(shape=(3))
+    SpatResol_perm[0]=SpatResol[0]
+    SpatResol_perm[1]=SpatResol[2]
+    SpatResol_perm[2]=SpatResol[1]
+    IMGdata_decoded_ABS = np.transpose (IMGdata_decoded_ABS, axes=(0,1,3,2))
+    IMGdata_decoded_PH  = np.transpose (IMGdata_decoded_PH,  axes=(0,1,3,2))
+    #there might still be a flip in H_F (right left in image)    
 else:
     SpatResol_perm = SpatResol
-    print ('Warning: unknown Slice Orientation',METHODdata["PVM_SPackArrReadOrient"]);
+    print ('Warning: unknown Slice Orientation',METHODdata["PVM_SPackArrSliceOrient"], METHODdata["PVM_SPackArrReadOrient"]);
     print ('         resulting images may be rotated incorrectly'); 
 print('.', end='') #progress indicator
 
-#find noise mask threshold from histogram
-#image_number = 0 # 0 is static, 1 is flow
-#n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
-#steps=int(n_points/1000); start=0; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
-#xbins =  np.linspace(start,fin,steps)
-#ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
-#ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
-#ybins = smooth(ybins,steps/20)
-#--- old code find minimum ---
-#start=ybins.argmax()
-#i=start;minx=0;miny=ybins[start]
-#while i<len(ybins):
-#    i+=1
-#    if ybins[i]<=miny: miny=ybins[i]; minx=i; 
-#    else: i=len(ybins);
-#threshold=xbins[minx]
-#--- new code find FWHM ---
-#start=ybins.argmax(); i=start
-#while i<len(ybins):
-#    i+=1
-#    if ybins[i]<np.max(ybins)/2: 
-#        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
-#        i=len(ybins);   
-#mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold  
-#enable the following view histogram plot
-#print ('\nThreshold = %.2e' % threshold)
-#import pylab; pylab.plot(xbins,ybins, linewidth=1.2); pylab.draw();
-#pylab.show(block=False); os.system("pause"); pylab.close(); 
-
-# use noise in all 8 corners to establish threshold
-image_number = 0 # 0 is static, 1 is flow
+image_number = 1 # 0 is static, 1 is flow
 N=10 # use 10% at the corners of the FOV
 std_fac = 6 # how many standard deviations to add
 tresh=np.empty(shape=8,dtype=np.float)
@@ -478,20 +458,20 @@ print('.', end='') #progress indicator
 venc=METHODdata["FlowRange"]
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_decoded_ABS.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_decoded_ABS.shape[1]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[2]/2)*aff[2,2]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_decoded_ABS.shape[2]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[3]/2)*aff[2,2]
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
 NIFTIimg.header['sform_code']=1
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(1,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT0.nii.gz'))
+try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Static.nii.gz'))
 except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,1,:,:], aff)
 NIFTIimg.header['sform_code']=1
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(1,0)
-try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT1.nii.gz'))
+try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Flow.nii.gz'))
 except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,0,:,:], aff)
@@ -503,7 +483,7 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
 
 #write flowvolume results
-if METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArrReadOrient"] == "L_R":
+if METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArrReadOrient"] == "L_R" and METHODdata["FlowEncodingDirection"] == "SliceDirection":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
         text_file.write("Flow Volumes per slice (X):\n")
         for i in range(0,IMGdata_decoded_PH.shape[3]): # in our data shape[2] is the main flow direction
@@ -516,7 +496,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArr
 else:
     try: os.remove (os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'))
     except: pass #silent
-    print ('Warning: textfile with flow values not written (unknown Orientation)');   
+    print ('Warning: textfile with flow values not written (unknown Orientation and flow encoding direction)');   
 #end
 
 #end

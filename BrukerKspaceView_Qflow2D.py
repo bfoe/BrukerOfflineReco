@@ -153,8 +153,10 @@ METHODdata=ReadParamFile(METHODfile)
 #check for not implemented stuff
 if METHODdata["Method"] != "FLOWMAP" or METHODdata["FlowMode"] != "VelocityMapping":
     print ('ERROR: Recon only implemented for FLOWMAP VelocityMapping'); sys.exit(1)
-if METHODdata["PVM_SpatDimEnum"] != "2D" or METHODdata["FlowEncodingDirection"] != "SliceDirection":
-    print ('ERROR: Recon only implemented for 2D acquisition with flow incoding in slice direction'); sys.exit(1)
+if METHODdata["PVM_SpatDimEnum"] != "2D":
+    print ('ERROR: Recon only implemented for 2D acquisition'); sys.exit(1)
+if METHODdata["FlowEncodingDirection"] == "AllDirections":
+    print ('ERROR: Recon not implemented for flow incoding in all directions'); sys.exit(1)
 if METHODdata["FlowEncLoop"] !=2:
     print ('ERROR: ops, expected flow encoding loop = 2 '); sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
@@ -183,12 +185,14 @@ order1=METHODdata["PVM_EncSteps1"]+dim[2]/2
 for i in range(0,dim[2]): FIDdata_tmp[:,:,:,order1[i]]=FIDrawdata_CPX[:,:,:,i]
 FIDrawdata_CPX = 0 #free memory  
 order2=METHODdata["PVM_ObjOrderList"]
-for i in range(0,dim[1]): FIDdata[:,:,order2[i],:]=FIDdata_tmp[:,:,i,:]
+if dim[1]>1: # more than one slice
+    for i in range(0,dim[1]): FIDdata[:,:,order2[i],:]=FIDdata_tmp[:,:,i,:]
+else: # only one slice
+    FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
 FIDrawdata_CPX =  FIDdata
 FIDdata = 0 #free memory
 
-    
 #view k-space
 dim = FIDrawdata_CPX.shape
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
