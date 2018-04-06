@@ -138,21 +138,24 @@ mask =  IMGdata_decoded_PH [:,:,:,:] > 0
 venc_arr = np.amax (IMGdata_decoded_PH[:,:,:,:], axis=(0,1,2))
 max_venc = np.amax(venc_arr)
 niter_arr = np.zeros (shape=(nfiles),dtype=np.int32)
+# setup all possible combinations 
 list_of_arrays = []
 for file_nr in range (0,nfiles): 
     niter_arr[file_nr] = math.ceil(max_venc/venc_arr[file_nr])
     list_of_arrays.append (np.asarray(range (-1*niter_arr[file_nr]+1, niter_arr[file_nr])))
 PhUnwrap_combinations = combine_arrays (list_of_arrays)
+# filter such that within each combination all elements have same signum
 i=0
 while i<PhUnwrap_combinations.shape[0]:
     signs = np.unique (np.sign(PhUnwrap_combinations[i,:]))
     if (1 in signs and -1 in signs):
         PhUnwrap_combinations = np.delete (PhUnwrap_combinations, i, axis=(0))
     else: i +=1
-PhUnwrap_combinations = PhUnwrap_combinations.astype (float)   
 n_combinations = PhUnwrap_combinations.shape[0]
+# scale from integer to venc
+PhUnwrap_combinations = PhUnwrap_combinations.astype (float)   
 for file_nr in range (0,nfiles):
-    PhUnwrap_combinations[:,file_nr] *= venc_arr[file_nr]
+    PhUnwrap_combinations[:,file_nr] *= 2*venc_arr[file_nr]
 # force combinations increasing with decreasing venc
 i=0
 while i<PhUnwrap_combinations.shape[0]:
@@ -165,6 +168,24 @@ while i<PhUnwrap_combinations.shape[0]:
     if remove: PhUnwrap_combinations = np.delete (PhUnwrap_combinations, i, axis=(0))
     else: i +=1
 print('.', end='') #progress indicator
+
+#make results folder
+dirname = os.path.abspath(os.path.dirname(FIDfile[0])+slash+'..'+slash+'PhaseUnwrap')
+new_dirname = dirname
+i=0
+while os.path.exists(new_dirname):
+   i+=1
+   new_dirname = dirname+'('+str(i)+')'
+try: os.makedirs(new_dirname)
+except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
+#write logfile      
+logfile = open(new_dirname+slash+'Logfile.txt', "w")
+logfile.write('Output NIFTI file is the phase unwrapping result from:\n')
+for i in range (0,nfiles):
+    logfile.write(FIDfile[i]+'\n')
+logfile.write('\n\n\n')
+logfile.write('Venc`s = '+np.array_str(venc_arr[:])+'\n')
+logfile.write('AllBefore\tNonzeroBefore\t\tNonZeroAfter\n')
     
 #PhaseUnwrap
 dim = IMGdata_decoded_PH.shape;
@@ -199,6 +220,8 @@ for k in range (0, dim_reduced):
       chi = np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1))      
       min_chi_index = np.argmin (chi)
       Img_PH_flow_NZ [k] = avg[min_chi_index]
+      if not np.array_equal(IMGdata_decoded_PH_NZ[k,nz],PhUnwrap_try[min_chi_index,:]):
+          logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(IMGdata_decoded_PH_NZ[k,nz])+'\t'+np.array_str(PhUnwrap_try[min_chi_index,:])+'\n')
 Img_PH_flow[all_nonzero] = Img_PH_flow_NZ[:] # undo vector reduction   
 Img_PH_flow = Img_PH_flow.reshape (dim[0],dim[1],dim[2]) # undo flatten           
 print (' ')
@@ -208,18 +231,8 @@ Max_PH_flow   = np.amax (np.abs(Img_PH_flow));
 Img_PH_flow *= 32767./Max_PH_flow
 Img_PH_flow   = Img_PH_flow.astype(np.int16)
 
-
-#make results folder
-dirname = os.path.abspath(os.path.dirname(FIDfile[0])+slash+'..'+slash+'PhaseUnwrap')
-new_dirname = dirname
-i=0
-while os.path.exists(new_dirname):
-   i+=1
-   new_dirname = dirname+'('+str(i)+')'
-try: os.makedirs(new_dirname)
-except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
-print ("Saving results")
 #write averaged fid file
+print ("Saving results")
 aff = img.get_affine()
 unit_xyz, unit_t = img.header.get_xyzt_units()
 if unit_xyz == 'unknown': unit_xyz=0
@@ -231,12 +244,8 @@ img_SoS.set_qform(aff, code=1)
 img_SoS.header.set_slope_inter(Max_PH_flow/32767.,0)
 new_filename=os.path.basename(FIDfile[0])
 new_filename = new_filename[0:new_filename.rfind('.nii.gz')]+'_PhaseUnwrap.nii.gz'
-nib.save(img_SoS, new_dirname+slash+new_filename)   
-#write logfile      
-with open(new_dirname+slash+'Logfile.txt', "w") as logfile:
-    logfile.write('Output NIFTI file is the phase unwrapping result from:\n')
-    for i in range (0,nfiles):
-       logfile.write(FIDfile[i]+'\n')
+nib.save(img_SoS, new_dirname+slash+new_filename)
+logfile.close()   
 print ("done\n")  
      
 #end
