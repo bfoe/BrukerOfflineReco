@@ -134,7 +134,7 @@ for i in range (1,nfiles):
 
 print ('Starting Phase unwrap')
 #calc parameters for phase unwrap
-mask =  IMGdata_decoded_PH [:,:,:,:] > 0
+mask =  IMGdata_decoded_PH [:,:,:,:] != 0
 venc_arr = np.amax (IMGdata_decoded_PH[:,:,:,:], axis=(0,1,2))
 max_venc = np.amax(venc_arr)
 niter_arr = np.zeros (shape=(nfiles),dtype=np.int32)
@@ -157,16 +157,16 @@ PhUnwrap_combinations = PhUnwrap_combinations.astype (float)
 for file_nr in range (0,nfiles):
     PhUnwrap_combinations[:,file_nr] *= 2*venc_arr[file_nr]
 # force combinations increasing with decreasing venc
-i=0
-while i<PhUnwrap_combinations.shape[0]:
-    remove = False
-    for file_nr in range (0,nfiles-1):
-        if venc_arr[file_nr] > venc_arr[file_nr+1]:
-            if np.abs(PhUnwrap_combinations[i,file_nr])>np.abs(PhUnwrap_combinations[i,file_nr+1]): remove = True
-        else:
-            if np.abs(PhUnwrap_combinations[i,file_nr])<np.abs(PhUnwrap_combinations[i,file_nr+1]): remove = True
-    if remove: PhUnwrap_combinations = np.delete (PhUnwrap_combinations, i, axis=(0))
-    else: i +=1
+#i=0
+#while i<PhUnwrap_combinations.shape[0]:
+#    remove = False
+#    for file_nr in range (0,nfiles-1):
+#        if venc_arr[file_nr] > venc_arr[file_nr+1]:
+#            if np.abs(PhUnwrap_combinations[i,file_nr])>np.abs(PhUnwrap_combinations[i,file_nr+1]): remove = True
+#        else:
+#            if np.abs(PhUnwrap_combinations[i,file_nr])<np.abs(PhUnwrap_combinations[i,file_nr+1]): remove = True
+#    if remove: PhUnwrap_combinations = np.delete (PhUnwrap_combinations, i, axis=(0))
+#    else: i +=1
 print('.', end='') #progress indicator
 
 #make results folder
@@ -217,16 +217,22 @@ for k in range (0, dim_reduced):
       for i in range (0,local_combinations.shape[0]):
          PhUnwrap_try[i,:] = IMGdata_decoded_PH_NZ[k,nz]+local_combinations[i,:]            
       avg = np.average (PhUnwrap_try[:,:],axis=(1))
-      chi = np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1))      
+      #chi = np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1))
+      chi = np.sqrt(np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1)))/local_nfiles      
       min_chi_index = np.argmin (chi)
-      Img_PH_flow_NZ [k] = avg[min_chi_index]
-      if not np.array_equal(IMGdata_decoded_PH_NZ[k,nz],PhUnwrap_try[min_chi_index,:]):
-          logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(IMGdata_decoded_PH_NZ[k,nz])+'\t'+np.array_str(PhUnwrap_try[min_chi_index,:])+'\n')
+      if chi[min_chi_index]<0.2*avg[min_chi_index]:
+          Img_PH_flow_NZ [k] = avg[min_chi_index]
+          if not np.array_equal(IMGdata_decoded_PH_NZ[k,nz],PhUnwrap_try[min_chi_index,:]):
+              temp = np.zeros (shape=(nfiles),dtype=np.float32)
+              temp [nz] = PhUnwrap_try[min_chi_index,:]
+              logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(temp)+'\n')
 Img_PH_flow[all_nonzero] = Img_PH_flow_NZ[:] # undo vector reduction   
 Img_PH_flow = Img_PH_flow.reshape (dim[0],dim[1],dim[2]) # undo flatten           
 print (' ')
 
 #transform to int
+Img_PH_flow  [0,0,0] = 0
+Img_PH_flow  [1,1,1] = 0 
 Max_PH_flow   = np.amax (np.abs(Img_PH_flow));
 Img_PH_flow *= 32767./Max_PH_flow
 Img_PH_flow   = Img_PH_flow.astype(np.int16)
