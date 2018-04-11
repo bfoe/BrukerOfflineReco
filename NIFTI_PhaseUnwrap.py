@@ -179,8 +179,10 @@ while os.path.exists(new_dirname):
    new_dirname = dirname+'('+str(i)+')'
 try: os.makedirs(new_dirname)
 except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
-#write logfile      
-logfile = open(new_dirname+slash+'Logfile.txt', "w")
+#write logfile 
+logname = os.path.basename(FIDfile[0]);
+logname = logname[0:logname.rfind('.nii.gz')]+'_PhaseUnwrap.log'
+logfile = open(os.path.join(new_dirname,logname), "w")  
 logfile.write('Output NIFTI file is the phase unwrapping result from:\n')
 for i in range (0,nfiles):
     logfile.write(FIDfile[i]+'\n')
