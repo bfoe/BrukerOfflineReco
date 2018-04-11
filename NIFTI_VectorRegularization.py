@@ -116,19 +116,19 @@ FIDfile3=str(FIDfile3)
 
 # Set Output filenames
 logname = os.path.basename(FIDfile1);
-logname = logname[0:logname.rfind('_')];logname = logname[0:logname.rfind('_')]+'_Regularization.log'
+logname = logname[0:logname.rfind('_')];logname = logname[0:logname.rfind('_')]+'-Regularization.log'
 Vectorfile = os.path.basename(FIDfile1);
 Vectorfile = Vectorfile[0:Vectorfile.rfind('_')]+'Vector.mha'
 rVectorfile = os.path.basename(FIDfile1);
-rVectorfile = rVectorfile[0:rVectorfile.rfind('_')]+'Vector_regularized.mha'
+rVectorfile = rVectorfile[0:rVectorfile.rfind('_')]+'Vector-regularized.mha'
 OutXfile = os.path.basename(FIDfile1);
-OutXfile = OutXfile[0:OutXfile.rfind('.nii.gz')]+'_regularized.nii.gz'
+OutXfile = OutXfile[0:OutXfile.rfind('.nii.gz')]+'-regularized.nii.gz'
 OutYfile = os.path.basename(FIDfile2);
-OutYfile = OutYfile[0:OutYfile.rfind('.nii.gz')]+'_regularized.nii.gz'
+OutYfile = OutYfile[0:OutYfile.rfind('.nii.gz')]+'-regularized.nii.gz'
 OutZfile = os.path.basename(FIDfile3);
-OutZfile = OutZfile[0:OutZfile.rfind('.nii.gz')]+'_regularized.nii.gz'
+OutZfile = OutZfile[0:OutZfile.rfind('.nii.gz')]+'-regularized.nii.gz'
 Out_file = os.path.basename(FIDfile1); # SumOfSquares
-Out_file = Out_file[0:Out_file.rfind('_')]+'_regularized.nii.gz'      
+Out_file = Out_file[0:Out_file.rfind('_')]+'-regularized.nii.gz'      
 
 #make results folder
 dirname = os.path.abspath(os.path.dirname(FIDfile1)+slash+'..'+slash+'VectorRegularizationResult')

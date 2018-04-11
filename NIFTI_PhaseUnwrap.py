@@ -181,7 +181,7 @@ try: os.makedirs(new_dirname)
 except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
 #write logfile 
 logname = os.path.basename(FIDfile[0]);
-logname = logname[0:logname.rfind('.nii.gz')]+'_PhaseUnwrap.log'
+logname = logname[0:logname.rfind('.nii.gz')]+'-PhaseUnwrap.log'
 logfile = open(os.path.join(new_dirname,logname), "w")  
 logfile.write('Output NIFTI file is the phase unwrapping result from:\n')
 for i in range (0,nfiles):
@@ -251,7 +251,7 @@ img_SoS.set_sform(aff, code=0)
 img_SoS.set_qform(aff, code=1)
 img_SoS.header.set_slope_inter(Max_PH_flow/32767.,0)
 new_filename=os.path.basename(FIDfile[0])
-new_filename = new_filename[0:new_filename.rfind('.nii.gz')]+'_PhaseUnwrap.nii.gz'
+new_filename = new_filename[0:new_filename.rfind('.nii.gz')]+'-PhaseUnwrap.nii.gz'
 nib.save(img_SoS, new_dirname+slash+new_filename)
 logfile.close()   
 print ("done\n")  
