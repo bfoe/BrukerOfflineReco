@@ -454,8 +454,16 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPac
     SpatResol_perm[2]=SpatResol[2]
     IMGdata_decoded_ABS = np.transpose (IMGdata_decoded_ABS, axes=(2,1,0,3))
     IMGdata_decoded_ABS = IMGdata_decoded_ABS[::-1,:,:,:] # flip axis
+    IMGdata_decoded_ABS = IMGdata_decoded_ABS[:,:,:,::-1] # flip axis    
     IMGdata_decoded_PH = np.transpose (IMGdata_decoded_PH, axes=(2,1,0,3))
     IMGdata_decoded_PH = IMGdata_decoded_PH[::-1,:,:,:] # flip axis
+    IMGdata_decoded_PH = IMGdata_decoded_PH[:,:,:,::-1] # flip axis
+    #The following is to get the vector vizualization right in Paraview
+    dummy = np.zeros(shape=(IMGdata_decoded_PH.shape[0],IMGdata_decoded_PH.shape[2],IMGdata_decoded_PH.shape[3]),dtype=np.float32)
+    dummy [:] = IMGdata_decoded_PH[:,1,:,:] # save flow X component
+    IMGdata_decoded_PH[:,1,:,:] = IMGdata_decoded_PH[:,2,:,:] # X = Y
+    IMGdata_decoded_PH[:,2,:,:] = dummy # Y = X
+    IMGdata_decoded_PH[:,1,:,:] *= -1 # X invert sign
 elif METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
     IMGdata_decoded_ABS = np.rot90(IMGdata_decoded_ABS, k=1, axes=(0,2)) # rotate (axial A_P)
     IMGdata_decoded_PH = np.rot90(IMGdata_decoded_PH, k=1, axes=(0,2)) # rotate (axial A_P)

@@ -528,6 +528,20 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
+elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
+    if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[1]
+        SpatResol_perm[1]=SpatResol[0]
+        SpatResol_perm[2]=SpatResol[2]
+        IMGdata = np.transpose (IMGdata , axes=(1,0,2))
+        IMGdata = IMGdata [::-1,:,:] # flip axis
+        IMGdata = IMGdata [:,:,::-1] # flip axis
+    else:
+        SpatResol_perm=SpatResol    
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');
 else:
     SpatResol_perm=SpatResol
     print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
