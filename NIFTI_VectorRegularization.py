@@ -175,6 +175,7 @@ print ('Regularizing Vector Image')
 # higher NoiseLevel smooth more
 # lower Timestep idem
 filtered_image = itk.GradientVectorFlowImageFilter.New(composer.GetOutput(), IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
+filtered_image.Update()
 
 print ('Writing regularized Vector Image')
 writer = itk.ImageFileWriter[itk.Image.VF33].New(filtered_image)
