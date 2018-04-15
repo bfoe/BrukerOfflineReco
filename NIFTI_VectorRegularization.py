@@ -54,6 +54,23 @@ import os
 import numpy as np
 import nibabel as nib
 import itk
+# to test pyinstaller
+'''
+ImportProblem = False
+try: from itk import ImageFileReader
+except: print ('Error importing ITK module ImageFileReader'); ImportProblem = True
+try: from itk import ImageFileWriter
+except: print ('Error importing ITK module ImageFileWriter'); ImportProblem = True
+try: from itk import ComposeImageFilter
+except: print ('Error importing ITK module ComposeImageFilter'); ImportProblem = True
+try: from itk import GradientVectorFlowImageFilter
+except: print ('Error importing ITK module GradientVectorFlowImageFilter'); ImportProblem = True
+try: from itk import VectorIndexSelectionCastImageFilter
+except: print ('Error importing ITK module VectorIndexSelectionCastImageFilter'); ImportProblem = True
+try: from itk import GetArrayViewFromImage
+except: print ('Error importing ITK module GetArrayViewFromImage'); ImportProblem = True
+if ImportProblem: sys.exit(2)
+'''
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -154,19 +171,28 @@ with open(os.path.join(new_dirname,logname), "w") as logfile:
 # ------------------       ITK code starts here --------------------
 
 print ('Reading NIFTI Images')
-composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
-composer.SetInput(0, itk.imread(FIDfile1))
-composer.SetInput(1, itk.imread(FIDfile2))
-composer.SetInput(2, itk.imread(FIDfile3))
-composer.Update();
+image_X = itk.imread(FIDfile1); image_X.Update()
+image_Y = itk.imread(FIDfile2); image_Y.Update()
+image_Z = itk.imread(FIDfile3); image_Z.Update()
 
 print ('Writing Vector Image')
+composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
+composer.SetInput(0, image_X)
+composer.SetInput(1, image_Y)
+composer.SetInput(2, image_Z)
 writer = itk.ImageFileWriter[itk.Image.VF33].New(composer.GetOutput())
 writer.SetFileName(os.path.join(new_dirname,Vectorfile))
 writer.UseCompressionOn ()
 writer.Update()
 
 print ('Regularizing Vector Image')
+#image_X = itk.MedianImageFilter (image_X, Radius = 1) #only good forimages without much detail, e.g. phantoms
+#image_Y = itk.MedianImageFilter (image_Y, Radius = 1) #only good forimages without much detail, e.g. phantoms
+#image_Z = itk.MedianImageFilter (image_Z, Radius = 1) #only good forimages without much detail, e.g. phantoms
+composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
+composer.SetInput(0, image_X)
+composer.SetInput(1, image_Y)
+composer.SetInput(2, image_Z)
 # IterationNum MUST be = 1
 # txx file says:
 #   m_TimeStep = 0.001; m_NoiseLevel = 200; (lines 31-32)
@@ -174,6 +200,8 @@ print ('Regularizing Vector Image')
 # from: http://itk-users.7.n7.nabble.com/units-of-SetNoiseLevel-in-itkGradientVectorFlowImageFilter-td20115.html
 # higher NoiseLevel smooth more
 # lower Timestep idem
+# for smoother images increase IterationNum to 2-5
+# for phantoms with less degree of details IterationNum = 10 is OK
 filtered_image = itk.GradientVectorFlowImageFilter.New(composer.GetOutput(), IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
 filtered_image.Update()
 
