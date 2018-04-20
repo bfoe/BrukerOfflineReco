@@ -192,24 +192,37 @@ try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
 except: pass
 TKwindows.update()
     
-#intercatively choose input FID file
-FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files","fid")])
+#intercatively choose input FID files (flow and zero flow reference)
+FIDfile = askopenfilename(title="Choose Bruker FID file (main acq with flow)", filetypes=[("FID files","fid")])
 if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
-FIDfile = os.path.abspath(FIDfile) 
+FIDfile = os.path.abspath(FIDfile)
+haveRef = True 
+FIDfileRef = askopenfilename(title="Choose Bruker FID file (reference zero flow)", filetypes=[("FID files","fid")])
+if FIDfileRef == "": haveRef = False
+else: FIDfileRef = os.path.abspath(FIDfileRef) 
 TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
-#read FID 
+#read FID (main & ref)
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
+if haveRef:
+    with open(FIDfileRef, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+    FIDrawdata_CPX_REF = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
-#read acqp file
+#read acqp file (main & ref)
+if haveRef:
+    ACQPfileRef=os.path.dirname(FIDfileRef)+slash+'acqp'
+    ACQPdataRef=ReadParamFile(ACQPfileRef)
 ACQPfile=os.path.dirname(FIDfile)+slash+'acqp'
 ACQPdata=ReadParamFile(ACQPfile)
 
 #read method file
+if haveRef:
+    METHODfileRef=os.path.dirname(FIDfileRef)+slash+'method'
+    METHODdataRef=ReadParamFile(METHODfileRef)
 METHODfile=os.path.dirname(FIDfile)+slash+'method'
 METHODdata=ReadParamFile(METHODfile)
 
@@ -235,27 +248,75 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncPftAccel1"] != 1 or
    METHODdata["PVM_EncTotalAccel"] != 1 or METHODdata["PVM_EncNReceivers"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); sys.exit(1)
 
-# read input from keyboard
-xcor=0; ycor=0; zcor=0
-OK=False
-while not OK:
-    dummy = raw_input("Enter Flow correction X [cm/s]: ")
-    if dummy == '': dummy=0
-    try: xcor = float(dummy); OK=True
-    except: print ("Input Error")
-OK=False
-while not OK:
-    dummy = raw_input("Enter Flow correction Y [cm/s]: ")
-    if dummy == '': dummy=0    
-    try: ycor = float(dummy); OK=True
-    except: print ("Input Error")
-OK=False
-while not OK:
-    dummy = raw_input("Enter Flow correction Z [cm/s]: ")
-    if dummy == '': dummy=0    
-    try: zcor = float(dummy); OK=True
-    except: print ("Input Error")
 
+#check for identical parameters in main and reference
+if haveRef:
+    #sequence parameters
+    if METHODdata["Method"] != METHODdataRef["Method"] or METHODdata["FlowMode"] != METHODdataRef["FlowMode"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (Acquisition Method)'); 
+        sys.exit(1)
+    if METHODdata["PVM_EchoTime"] != METHODdataRef["PVM_EchoTime"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (TE)'); 
+        sys.exit(1)
+    if METHODdata["PVM_RepetitionTime"] != METHODdataRef["PVM_RepetitionTime"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (TR)'); 
+        sys.exit(1)
+    if METHODdata["FlowRange"] != METHODdataRef["FlowRange"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (venc)'); 
+        sys.exit(1)  
+    if METHODdata["PVM_EffSWh"] != METHODdataRef["PVM_EffSWh"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (Bandwidth)'); 
+        sys.exit(1)  
+    #geometry parameters
+    if METHODdata["PVM_SPackArrSliceOrient"] != METHODdataRef["PVM_SPackArrSliceOrient"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (Slice orientation)'); 
+        sys.exit(1)
+    if METHODdata["PVM_SPackArrReadOrient"] != METHODdataRef["PVM_SPackArrReadOrient"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (Readout direction)'); 
+        sys.exit(1)
+    if METHODdata["PVM_SPackArrPhase1Offset"] != METHODdataRef["PVM_SPackArrPhase1Offset"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (offset Phase)'); 
+        sys.exit(1)
+    if METHODdata["PVM_SPackArrSliceOffset"] != METHODdataRef["PVM_SPackArrSliceOffset"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (offset Slice)'); 
+        sys.exit(1)
+    if METHODdata["PVM_SPackArrReadOffset"] != METHODdataRef["PVM_SPackArrReadOffset"]:
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (offset Read)'); 
+        sys.exit(1)    
+    if str(METHODdata["PVM_Fov"]) != str(METHODdataRef["PVM_Fov"]):
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (FOV)'); 
+        sys.exit(1)     
+    if str(METHODdata["PVM_AntiAlias"]) != str(METHODdataRef["PVM_AntiAlias"]):
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (AntiAlias)'); 
+        sys.exit(1)
+    # angulations     
+    if str(ACQPdata["ACQ_grad_matrix"]) != str(ACQPdataRef["ACQ_grad_matrix"]):
+        print ('ERROR: Parameter mismatch beteen Main and Reference files (Angulations)'); 
+        sys.exit(1)    
+
+# read input from keyboard
+if not haveRef:
+    xcor=0; ycor=0; zcor=0
+    OK=False
+    while not OK:
+        dummy = raw_input("Enter Flow correction X [cm/s]: ")
+        if dummy == '': dummy=0
+        try: xcor = float(dummy); OK=True
+        except: print ("Input Error")
+    OK=False
+    while not OK:
+        dummy = raw_input("Enter Flow correction Y [cm/s]: ")
+        if dummy == '': dummy=0    
+        try: ycor = float(dummy); OK=True
+        except: print ("Input Error")
+    OK=False
+    while not OK:
+        dummy = raw_input("Enter Flow correction Z [cm/s]: ")
+        if dummy == '': dummy=0    
+        try: zcor = float(dummy); OK=True
+        except: print ("Input Error")
+
+        
 #start
 print ('Starting recon')    
 
@@ -268,7 +329,16 @@ try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,4,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]
 
-#reorder data
+# reshape reference
+if haveRef:
+    dimRef=METHODdataRef["PVM_EncMatrix"]
+    dim0 = dimRef[0]; dim0_mod_128 = dim0%128
+    if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
+    try: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF.reshape(dim0,4,dimRef[1],dimRef[2], order="F")
+    except: print ('ERROR: reference k-space data reshape failed (dimension problem)'); sys.exit(1)
+    if dim0 != dimRef[0]: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF[0:dimRef[0],:,:,:]
+
+#reorder data (main)
 FIDdata_tmp=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
 order1=METHODdata["PVM_EncSteps1"]+dim[1]/2                             
@@ -279,7 +349,19 @@ for i in range(0,dim[2]): FIDdata[:,:,:,order2[i]]=FIDdata_tmp[:,:,:,i]
 FIDdata_tmp = 0 #free memory  
 print('.', end='') #progress indicator
 
-#Hanning filter
+#reorder data (reference)
+if haveRef:
+    FIDdata_tmp=np.empty(shape=(dimRef[0],4,dimRef[1],dimRef[2]),dtype=np.complex64)
+    FIDdataRef=np.empty(shape=(dimRef[0],4,dimRef[1],dimRef[2]),dtype=np.complex64)
+    order1=METHODdataRef["PVM_EncSteps1"]+dimRef[1]/2                             
+    for i in range(0,dimRef[1]): FIDdata_tmp[:,:,order1[i],:]=FIDrawdata_CPX_REF[:,:,i,:]
+    FIDrawdata_CPX_REF = 0 #free memory  
+    order2=METHODdataRef["PVM_EncSteps2"]+dimRef[2]/2                             
+    for i in range(0,dimRef[2]): FIDdataRef[:,:,:,order2[i]]=FIDdata_tmp[:,:,:,i]
+    FIDdata_tmp = 0 #free memory  
+    print('.', end='') #progress indicator
+
+#Hanning filter (main)
 percentage = 5.
 npoints_x = int(float(dim[0])*percentage/100.)
 hanning_x = np.empty(shape=(dim[0]),dtype=np.float32)
@@ -297,7 +379,7 @@ hanning_y [0:npoints_y] = np.power(np.sin(y_),2)
 hanning_y [npoints_y:hanning_y.shape[0]-npoints_y] = 1
 y_ = y_[::-1] # reverse y_
 hanning_y [hanning_y.shape[0]-npoints_y:hanning_y.shape[0]] = np.power(np.sin(y_),2)
-#print (hanning_x)
+#print (hanning_y)
 FIDdata[:,:,:,:] *= hanning_y [None,None,:,None]
 npoints_z = int(float(dim[2])*percentage/100.)
 hanning_z = np.empty(shape=(dim[2]),dtype=np.float32)
@@ -306,11 +388,62 @@ hanning_z [0:npoints_z] = np.power(np.sin(z_),2)
 hanning_z [npoints_z:hanning_z.shape[0]-npoints_z] = 1
 z_ = z_[::-1] # reverse z_
 hanning_z [hanning_z.shape[0]-npoints_z:hanning_z.shape[0]] = np.power(np.sin(z_),2)
-#print (hanning_x)
+#print (hanning_z)
 FIDdata[:,:,:,:] *= hanning_z [None,None,None,:]
 print('.', end='') #progress indicator
 
-# apply FOV offsets = (linear phase in k-space)
+#for reference dimension < main imensions fill in zeros
+if haveRef:
+    if not np.array_equal (dimRef,dim):
+        if dimRef[0]>dim[0]: print ('ERROR: in reference dimension 1'); sys.exit(1)
+        if dimRef[1]>dim[1]: print ('ERROR: in reference dimension 2'); sys.exit(1) 
+        if dimRef[2]>dim[2]: print ('ERROR: in reference dimension 3'); sys.exit(1)  
+        FIDdataRef_=np.zeros(shape=FIDdata.shape,dtype=np.complex64)
+        dim0start=int((dim[0]-dimRef[0])/2)
+        dim1start=int((dim[1]-dimRef[1])/2)
+        dim2start=int((dim[2]-dimRef[2])/2)
+        FIDdataRef_[dim0start:dim0start+dimRef[0],:,dim1start:dim1start+dimRef[1],dim2start:dim2start+dimRef[2]] = \
+            FIDdataRef[0:dimRef[0],:,0:dimRef[1],0:dimRef[2]]
+        FIDdataRef=FIDdataRef_
+        FIDdataRef_ = 0 #free memory
+        dimRef=dim
+
+#modified Hanning filter (reference)
+if haveRef:
+    percentage_full = 20. 
+    #find real echo positions
+    max_echo_pos_x = np.argmax(np.sum(np.abs(FIDdataRef[:,:,:,:]),axis=(1,2,3)))
+    max_echo_pos_y = np.argmax(np.sum(np.abs(FIDdataRef[:,:,:,:]),axis=(0,1,3)))
+    max_echo_pos_z = np.argmax(np.sum(np.abs(FIDdataRef[:,:,:,:]),axis=(0,1,2)))
+    #print ('echo maximum position found at', max_echo_pos_x, max_echo_pos_y, max_echo_pos_z)
+    npoints_x = int(float(dimRef[0])*percentage_full/100.)
+    npoints_x = int(npoints_x/2.)*2+1 # make it odd
+    hanning_x = np.zeros(shape=(dimRef[0]),dtype=np.float32)
+    x_ = np.linspace (0,np.pi,num=npoints_x)
+    hanning_x [int(dimRef[0]/2)-npoints_x/2:int(dimRef[0]/2)+npoints_x/2+1] = 1-np.power(np.cos(x_),4)
+    #print (hanning_x)
+    hanning_x = np.roll (hanning_x, max_echo_pos_x-np.argmax(hanning_x)) # set to real echo position
+    FIDdataRef[:,:,:,:] *= hanning_x [:,None,None,None]
+    npoints_y = int(float(dimRef[1])*percentage_full/100.)
+    npoints_y = int(npoints_y/2.)*2+1 # make it odd
+    hanning_y = np.zeros(shape=(dimRef[1]),dtype=np.float32)
+    y_ = np.linspace (0,np.pi,num=npoints_y)
+    hanning_y [int(dimRef[1]/2)-npoints_y/2:int(dimRef[1]/2)+npoints_y/2+1] = 1-np.power(np.cos(y_),4)
+    #print (hanning_y)
+    hanning_y = np.roll (hanning_y, max_echo_pos_y-np.argmax(hanning_y)) # set to real echo position
+    FIDdataRef[:,:,:,:] *= hanning_y [None,None,:,None]
+    npoints_z = int(float(dimRef[2])*percentage_full/100.)
+    npoints_z = int(npoints_z/2.)*2+1 # make it odd
+    hanning_z = np.zeros(shape=(dimRef[2]),dtype=np.float32)
+    z_ = np.linspace (0,np.pi,num=npoints_z)
+    hanning_z [int(dimRef[2]/2)-npoints_z/2:int(dimRef[2]/2)+npoints_z/2+1] = 1-np.power(np.cos(z_),4)
+    #print (hanning_z)
+    hanning_z = np.roll (hanning_z, max_echo_pos_z-np.argmax(hanning_z)) # set to real echo position
+    FIDdataRef[:,:,:,:] *= hanning_z [None,None,None,:]
+    print('.', end='') #progress indicator
+
+
+# apply FOV offsets = (linear phase in k-space) main
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
 SPackArrSliceOffset=METHODdata["PVM_SPackArrSliceOffset"]
 realFOV = METHODdata["PVM_Fov"]*METHODdata["PVM_AntiAlias"]
@@ -320,9 +453,24 @@ mag = np.abs(FIDdata[:,:,:,:]); ph = np.angle(FIDdata[:,:,:,:])
 for i in range(0,FIDdata.shape[2]): ph[:,:,i,:] -= float(i-int(FIDdata.shape[2]/2))*phase_step1
 for j in range(0,FIDdata.shape[3]): ph[:,:,:,j] -= float(j-int(FIDdata.shape[3]/2))*phase_step2
 FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
+mag= 0; ph=0 # free memory 
 print('.', end='') #progress indicator
 
-#zero fill
+# apply FOV offsets = (linear phase in k-space) reference
+if haveRef:
+    PackArrPhase1Offset=METHODdataRef["PVM_SPackArrPhase1Offset"]
+    SPackArrSliceOffset=METHODdataRef["PVM_SPackArrSliceOffset"]
+    realFOV = METHODdataRef["PVM_Fov"]*METHODdataRef["PVM_AntiAlias"]
+    phase_step1 = +2.*np.pi*float(PackArrPhase1Offset)/float(realFOV[1])
+    phase_step2 = -2.*np.pi*float(SPackArrSliceOffset)/float(realFOV[2])
+    mag = np.abs(FIDdataRef[:,:,:,:]); ph = np.angle(FIDdataRef[:,:,:,:])
+    for i in range(0,FIDdataRef.shape[2]): ph[:,:,i,:] -= float(i-int(FIDdataRef.shape[2]/2))*phase_step1
+    for j in range(0,FIDdataRef.shape[3]): ph[:,:,:,j] -= float(j-int(FIDdataRef.shape[3]/2))*phase_step2
+    FIDdataRef [:,:,:,:] = mag * np.exp(1j*ph)
+    mag= 0; ph=0 # free memory
+    print('.', end='') #progress indicator
+
+#zero fill (main)
 zero_fill=2.
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 FIDdata_ZF=np.zeros(shape=(int(dim[0]*zero_fill),4,int(dim[1]*zero_fill),
@@ -336,7 +484,20 @@ FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory
 dim=dim*zero_fill; dim=dim.astype(int) 
 
-#FFT (individually by axis, to save memory)
+#zero fill (reference)
+if haveRef:
+    FIDdata_ZF=np.zeros(shape=(int(dimRef[0]*zero_fill),4,int(dimRef[1]*zero_fill),
+                               int(dimRef[2]*zero_fill)),dtype=np.complex64)
+    dim0start=int(dimRef[0]*(zero_fill-1)/2)
+    dim1start=int(dimRef[1]*(zero_fill-1)/2)
+    dim2start=int(dimRef[2]*(zero_fill-1)/2)
+    FIDdata_ZF[dim0start:dim0start+dimRef[0],:,dim1start:dim1start+dimRef[1],dim2start:dim2start+dimRef[2]] = \
+        FIDdataRef[0:dimRef[0],:,0:dimRef[1],0:dimRef[2]]
+    FIDdataRef=FIDdata_ZF;
+    FIDdata_ZF = 0 #free memory
+    dimRef=dimRef*zero_fill; dimRef=dimRef.astype(int) 
+
+#FFT (main)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
 EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
@@ -352,8 +513,27 @@ IMGdata = np.fft.fftshift(IMGdata, axes=(0))
 IMGdata = np.fft.fftshift(IMGdata, axes=(2))
 IMGdata = np.fft.fftshift(IMGdata, axes=(3))
 print('.', end='') #progress indicator
+
+#FFT (reference)
+if haveRef:
+    EchoPosition_raw=METHODdataRef["PVM_EchoPosition"]
+    EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
+    EchoPosition=int(EchoPosition_raw/100.*dimRef[0])
+    IMGdataRef=FIDdataRef
+    FIDdataRef = 0 #free memory
+    IMGdataRef=np.roll(IMGdataRef, -EchoPosition, axis=(0))
+    IMGdataRef = np.fft.fftshift(IMGdataRef, axes=(2))
+    IMGdataRef = np.fft.fftshift(IMGdataRef, axes=(3)); print('.', end='') #progress indicator
+    for i in range(0,IMGdataRef.shape[1]):
+        IMGdataRef [:,i,:,:] = FFT3D(IMGdataRef[:,i,:,:])
+        print('.', end='') #progress indicator
+    IMGdataRef = np.fft.fftshift(IMGdataRef, axes=(0))
+    IMGdataRef = np.fft.fftshift(IMGdataRef, axes=(2))
+    IMGdataRef = np.fft.fftshift(IMGdataRef, axes=(3))
+    print('.', end='') #progress indicator
+
         
-#throw out antialiasing
+#throw out antialiasing (main)
 crop=METHODdata["PVM_AntiAlias"]
 dim0start=int((dim[0]-dim[0]/crop[0])/2)
 dim1start=int((dim[1]-dim[1]/crop[1])/2)
@@ -367,26 +547,51 @@ dim[1] = dim1end-dim1start
 dim[2] = dim2end-dim2start
 print('.', end='') #progress indicator
 
-#Phase offset correction
-venc=METHODdata["FlowRange"]
-mag = np.abs(IMGdata [:,0,:,:]); ph = np.angle(IMGdata [:,0,:,:])
-ph += -1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
-IMGdata [:,0,:,:] = mag * np.exp(1j*ph)
-print('.', end='') #progress indicator
-mag = np.abs(IMGdata [:,1,:,:]); ph = np.angle(IMGdata [:,1,:,:])
-ph += +1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
-IMGdata [:,1,:,:] = mag * np.exp(1j*ph)
-print('.', end='') #progress indicator
-mag = np.abs(IMGdata [:,2,:,:]); ph = np.angle(IMGdata [:,2,:,:])
-ph += +1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
-IMGdata [:,2,:,:] = mag * np.exp(1j*ph)
-print('.', end='') #progress indicator
-mag = np.abs(IMGdata [:,3,:,:]); ph = np.angle(IMGdata [:,3,:,:])
-ph += -1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
-IMGdata [:,3,:,:] = mag * np.exp(1j*ph)
-print('.', end='') #progress indicator
+#throw out antialiasing (reference)
+if haveRef:
+    crop=METHODdataRef["PVM_AntiAlias"]
+    dim0start=int((dimRef[0]-dimRef[0]/crop[0])/2)
+    dim1start=int((dimRef[1]-dimRef[1]/crop[1])/2)
+    dim2start=int((dimRef[2]-dimRef[2]/crop[2])/2)
+    dim0end = int(dim0start+dimRef[0]/crop[0])
+    dim1end = int(dim1start+dimRef[1]/crop[1])
+    dim2end = int(dim2start+dimRef[2]/crop[2])
+    IMGdataRef = IMGdataRef[dim0start:dim0end,:,dim1start:dim1end,dim2start:dim2end]
+    dimRef[0] = dim0end-dim0start
+    dimRef[1] = dim1end-dim1start
+    dimRef[2] = dim2end-dim2start
+    print('.', end='') #progress indicator
 
-
+#Phase correction 
+if haveRef: # using reference, this is what actually does the trick
+    temp = IMGdata/IMGdataRef; # complex division is equivalent to phase subtraction
+    ph = np.angle(temp [:,:,:,:])
+    temp = 0 # free memory
+    #Put things together again
+    mag = np.abs(IMGdata [:,:,:,:]); 
+    IMGdata [:,:,:,:] = mag * np.exp(1j*ph)
+    print('.', end='') #progress indicator
+    IMGdataRef = 0 # free memory
+else: # without reference enable manual 0 order correction
+    venc=METHODdata["FlowRange"]
+    mag = np.abs(IMGdata [:,0,:,:]); ph = np.angle(IMGdata [:,0,:,:])
+    ph += -1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
+    IMGdata [:,0,:,:] = mag * np.exp(1j*ph)
+    print('.', end='') #progress indicator
+    mag = np.abs(IMGdata [:,1,:,:]); ph = np.angle(IMGdata [:,1,:,:])
+    ph += +1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. -1.0*zcor/venc*np.pi/4.
+    IMGdata [:,1,:,:] = mag * np.exp(1j*ph)
+    print('.', end='') #progress indicator
+    mag = np.abs(IMGdata [:,2,:,:]); ph = np.angle(IMGdata [:,2,:,:])
+    ph += +1.0*xcor/venc*np.pi/4. -1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
+    IMGdata [:,2,:,:] = mag * np.exp(1j*ph)
+    print('.', end='') #progress indicator
+    mag = np.abs(IMGdata [:,3,:,:]); ph = np.angle(IMGdata [:,3,:,:])
+    ph += -1.0*xcor/venc*np.pi/4. +1.0*ycor/venc*np.pi/4. +1.0*zcor/venc*np.pi/4.
+    IMGdata [:,3,:,:] = mag * np.exp(1j*ph)
+    print('.', end='') #progress indicator
+    
+    
 # Hadamard decoding
 #
 # from https://www.ncbi.nlm.nih.gov/pubmed/1790361
@@ -446,7 +651,9 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPa
     IMGdata_decoded_ABS = IMGdata_decoded_ABS[::-1,:,:,:] # reverse x  
     IMGdata_decoded_ABS = IMGdata_decoded_ABS[:,:,:,::-1] # reverse y      
     IMGdata_decoded_PH = IMGdata_decoded_PH[::-1,:,:,:] # reverse x  
-    IMGdata_decoded_PH = IMGdata_decoded_PH[:,:,:,::-1] # reverse y          
+    IMGdata_decoded_PH = IMGdata_decoded_PH[:,:,:,::-1] # reverse y    
+    #The following is to get the vector vizualization right in Paraview
+    IMGdata_decoded_PH[:,1,:,:] *= -1 # X invert sign
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
     SpatResol_perm = np.empty(shape=(3))
     SpatResol_perm[0]=SpatResol[1]
