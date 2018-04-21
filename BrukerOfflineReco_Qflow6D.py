@@ -41,6 +41,9 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
+from scipy import misc
+from scipy import ndimage
+from scipy import signal
 
 pyfftw_installed = True
 try: 
@@ -562,15 +565,39 @@ if haveRef:
     dimRef[2] = dim2end-dim2start
     print('.', end='') #progress indicator
 
+
+
+    
+    
 #Phase correction 
 if haveRef: # using reference, this is what actually does the trick
-    temp = IMGdata/IMGdataRef; # complex division is equivalent to phase subtraction
+    # 1) Magnitude correction (with veeeerrry heavy filtering to avoid SNR degradation)
+    temp = np.abs(IMGdataRef)
+    base = np.average(temp, axis=(1))
+    mag_cor = np.zeros (shape=IMGdataRef.shape)
+    mag_cor[:,:,:,:] = temp[:,:,:,:]/base[:,None,:,:]
+    temp = 0; base = 0  # free memory    
+    mag_cor = ndimage.interpolation.zoom(mag_cor[:,:,:,:],[0.25,1,0.25,0.25],order=1) # downsample
+    print('.', end='') #progress indicator
+    mag_cor = ndimage.filters.median_filter(mag_cor, size = (7,1,7,7)) # median filter
+    print('.', end='') #progress indicator
+    s = 3; w = 9; t = (((w - 1)/2)-0.5)/s
+    mag_cor[:,0,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,0,:,:], sigma=s, truncate=t)
+    mag_cor[:,1,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,1,:,:], sigma=s, truncate=t)
+    mag_cor[:,2,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,2,:,:], sigma=s, truncate=t)
+    mag_cor[:,3,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,3,:,:], sigma=s, truncate=t)
+    print('.', end='') #progress indicator
+    mag_cor = ndimage.interpolation.zoom(mag_cor[:,:,:,:],[4,1,4,4],order=1) # upsample
+    print('.', end='') #progress indicator
+    # 2) Phase Correction - complex division is equivalent to phase subtraction
+    temp = IMGdata/IMGdataRef; 
     ph = np.angle(temp [:,:,:,:])
     temp = 0 # free memory
     #Put things together again
-    mag = np.abs(IMGdata [:,:,:,:]); 
+    mag = np.abs(IMGdata [:,:,:,:])/mag_cor; 
     IMGdata [:,:,:,:] = mag * np.exp(1j*ph)
     print('.', end='') #progress indicator
+    mag_cor = 0 # free memory
     IMGdataRef = 0 # free memory
 else: # without reference enable manual 0 order correction
     venc=METHODdata["FlowRange"]
