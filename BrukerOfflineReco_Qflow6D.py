@@ -41,9 +41,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
-from scipy import misc
 from scipy import ndimage
-from scipy import signal
 
 pyfftw_installed = True
 try: 
@@ -670,6 +668,12 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPack
     IMGdata_decoded_ABS = np.rot90(IMGdata_decoded_ABS, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
     IMGdata_decoded_PH = np.transpose (IMGdata_decoded_PH, axes=(2,1,0,3))
     IMGdata_decoded_PH = np.rot90(IMGdata_decoded_PH, k=2, axes=(0,3)) # k=2 is a 180 degree rotation
+    #The following is to get the vector vizualization right in Paraview
+    dummy = np.zeros(shape=(IMGdata_decoded_PH.shape[0],IMGdata_decoded_PH.shape[2],IMGdata_decoded_PH.shape[3]),dtype=np.float32)
+    dummy [:] = IMGdata_decoded_PH[:,1,:,:] # save flow X component
+    IMGdata_decoded_PH[:,1,:,:] = IMGdata_decoded_PH[:,2,:,:] # X = Y
+    IMGdata_decoded_PH[:,2,:,:] = dummy # Y = X
+    IMGdata_decoded_PH[:,1,:,:] *= -1 # X invert sign    
 elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
     SpatResol_perm = np.empty(shape=(3))
     SpatResol_perm[0]=SpatResol[0]
@@ -705,6 +709,13 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackA
     SpatResol_perm[0] = SpatResol[1]
     SpatResol_perm[1] = SpatResol[0]
     SpatResol_perm[2] = SpatResol[2]
+    #The following is to get the vector vizualization right in Paraview
+    dummy = np.zeros(shape=(IMGdata_decoded_PH.shape[0],IMGdata_decoded_PH.shape[2],IMGdata_decoded_PH.shape[3]),dtype=np.float32)
+    dummy [:] = IMGdata_decoded_PH[:,1,:,:] # save flow X component
+    IMGdata_decoded_PH[:,1,:,:] = IMGdata_decoded_PH[:,2,:,:] # X = Y
+    IMGdata_decoded_PH[:,2,:,:] = dummy # Y = X
+    IMGdata_decoded_PH[:,1,:,:] *= -1 # X invert sign 
+    IMGdata_decoded_PH[:,3,:,:] *= -1 # Z invert sign    
 else:
     SpatResol_perm = SpatResol
     print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"], 
