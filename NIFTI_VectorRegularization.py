@@ -42,6 +42,7 @@
 #    with the following additional libraries: 
 #    - numpy
 #    - nibabel
+#    - itk 
 #
 
 
@@ -53,24 +54,9 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
+import new # required for ITK work with pyinstaller
 import itk
-# to test pyinstaller
-'''
-ImportProblem = False
-try: from itk import ImageFileReader
-except: print ('Error importing ITK module ImageFileReader'); ImportProblem = True
-try: from itk import ImageFileWriter
-except: print ('Error importing ITK module ImageFileWriter'); ImportProblem = True
-try: from itk import ComposeImageFilter
-except: print ('Error importing ITK module ComposeImageFilter'); ImportProblem = True
-try: from itk import GradientVectorFlowImageFilter
-except: print ('Error importing ITK module GradientVectorFlowImageFilter'); ImportProblem = True
-try: from itk import VectorIndexSelectionCastImageFilter
-except: print ('Error importing ITK module VectorIndexSelectionCastImageFilter'); ImportProblem = True
-try: from itk import GetArrayViewFromImage
-except: print ('Error importing ITK module GetArrayViewFromImage'); ImportProblem = True
-if ImportProblem: sys.exit(2)
-'''
+
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
