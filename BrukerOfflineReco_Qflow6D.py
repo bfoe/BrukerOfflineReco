@@ -31,7 +31,7 @@
 #    with the following additional libraries: 
 #    - numpy
 #    - nibabel
-#    - matplotlib.pylab (optional)
+#    - scipy
 #
 
 from __future__ import print_function
@@ -41,8 +41,14 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
-from scipy import ndimage
-
+if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
+   from scipy_extract import zoom
+   from scipy_extract import median_filter
+   from scipy_extract import gaussian_filter
+else: # running native python
+   from scipy.ndimage import zoom 
+   from scipy.ndimage import median_filter 
+   from scipy.ndimage import gaussian_filter    
 pyfftw_installed = True
 try: 
     import pyfftw
@@ -575,17 +581,17 @@ if haveRef: # using reference, this is what actually does the trick
     mag_cor = np.zeros (shape=IMGdataRef.shape)
     mag_cor[:,:,:,:] = temp[:,:,:,:]/base[:,None,:,:]
     temp = 0; base = 0  # free memory    
-    mag_cor = ndimage.interpolation.zoom(mag_cor[:,:,:,:],[0.25,1,0.25,0.25],order=1) # downsample
+    mag_cor = zoom(mag_cor[:,:,:,:],[0.25,1,0.25,0.25],order=1) # downsample
     print('.', end='') #progress indicator
-    mag_cor = ndimage.filters.median_filter(mag_cor, size = (7,1,7,7)) # median filter
+    mag_cor = median_filter(mag_cor, size = (7,1,7,7)) # median filter
     print('.', end='') #progress indicator
     s = 3; w = 9; t = (((w - 1)/2)-0.5)/s
-    mag_cor[:,0,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,0,:,:], sigma=s, truncate=t)
-    mag_cor[:,1,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,1,:,:], sigma=s, truncate=t)
-    mag_cor[:,2,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,2,:,:], sigma=s, truncate=t)
-    mag_cor[:,3,:,:] = ndimage.filters.gaussian_filter(mag_cor[:,3,:,:], sigma=s, truncate=t)
+    mag_cor[:,0,:,:] = gaussian_filter(mag_cor[:,0,:,:], sigma=s, truncate=t)
+    mag_cor[:,1,:,:] = gaussian_filter(mag_cor[:,1,:,:], sigma=s, truncate=t)
+    mag_cor[:,2,:,:] = gaussian_filter(mag_cor[:,2,:,:], sigma=s, truncate=t)
+    mag_cor[:,3,:,:] = gaussian_filter(mag_cor[:,3,:,:], sigma=s, truncate=t)  
     print('.', end='') #progress indicator
-    mag_cor = ndimage.interpolation.zoom(mag_cor[:,:,:,:],[4,1,4,4],order=1) # upsample
+    mag_cor = zoom(mag_cor[:,:,:,:],[4,1,4,4],order=1) # upsample    
     print('.', end='') #progress indicator
     # 2) Phase Correction - complex division is equivalent to phase subtraction
     temp = IMGdata/IMGdataRef; 
