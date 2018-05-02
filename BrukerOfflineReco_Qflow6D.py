@@ -3,6 +3,26 @@
 # reconstructs images from raw acquisition data (FID files)
 # this version is for the FLOWMAP method only
 #
+#
+# first choose a bruker FID file of the flow acquisitiom
+# then choose a reference FID file without flow
+# - the reference will be used to correct for eddy current effects 
+# - without refrence (the dialogue can be canceled) the main flow
+#   acquisition can still be reconstructed, zero order corrections can 
+#   be entered manually when prompted
+# - the reference acquisition should have been acquired without flow
+#   with the following parameters identical to the main acquisition:
+#   same sequence paraemters: TE, TR, Receiver Bandwidth, Velocity encoding
+#   same geometry parameters: slice orientation, readout direction, 
+#       FOV, anti-alias, offsets and angulation
+#   parameters that can be different are: 
+#       number of averages, number of phase encoding steps
+#   recommended for the reference acquisition are:
+#       1/2 of the number of averages compared to the main acquisition
+#       1/4 of the pase encoding steps in both phase encoding directions
+#       (this should change the matrix size and resolution, but NOT the FOV) 
+#      
+#
 # ----- VERSION HISTORY -----
 #
 # Version 0.1 - 08, August 2017
