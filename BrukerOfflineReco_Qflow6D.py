@@ -749,34 +749,6 @@ else:
     print ('         resulting images may be rotated incorrectly'); 
 print('.', end='') #progress indicator
 
-#find noise mask threshold from histogram
-#image_number = 4 # 0 is static, 4 is flow
-#n_points=IMGdata_decoded_ABS.shape[0]*IMGdata_decoded_ABS.shape[2]*IMGdata_decoded_ABS.shape[3]
-#steps=int(n_points/1000); start=0; fin=np.max(IMGdata_decoded_ABS [:,image_number,:,:])
-#xbins =  np.linspace(start,fin,steps)
-#ybins, binedges = np.histogram(IMGdata_decoded_ABS [:,image_number,:,:], bins=xbins)
-#ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
-#ybins = smooth(ybins,steps/20)
-#--- old code find minimum ---
-#start=ybins.argmax()
-#i=start;minx=0;miny=ybins[start]
-#while i<len(ybins):
-#    i+=1
-#    if ybins[i]<=miny: miny=ybins[i]; minx=i; 
-#    else: i=len(ybins);
-#threshold=xbins[minx]
-#--- new code find FWHM ---
-#start=ybins.argmax(); i=start
-#while i<len(ybins):
-#    i+=1
-#    if ybins[i]<np.max(ybins)/2: 
-#        threshold=xbins[start]+4.0*(xbins[i]-xbins[start]);
-#        i=len(ybins);   
-#mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold  
-#enable the following view histogram plot
-#print ('\nThreshold = %.2e' % threshold)
-#import pylab; pylab.plot(xbins,ybins, linewidth=1.2); pylab.draw();
-#pylab.show(block=False); os.system("pause"); pylab.close(); 
 
 # use noise in all 8 corners to establish threshold
 image_number = 4 # 0 is static, 4 is flow
@@ -842,8 +814,18 @@ avg[7]=np.mean(arr)
 std[7]=np.std(arr)
 tresh[7]=avg[7] + std_fac*std[7]
 threshold=np.min(tresh)
-mask =  IMGdata_decoded_ABS [:,image_number,:,:] > threshold
+mask = IMGdata_decoded_ABS [:,image_number,:,:] > threshold
+mask = mask.astype(np.int16)
 
+#mask_fl =  IMGdata_decoded_ABS [:,4,:,:] > threshold # 4 is flow
+#mask_st =  IMGdata_decoded_ABS [:,0,:,:] > threshold # 0 is static
+# put the final mask together
+# the second term takes care of the pixels close to phase wraps
+# an equivalent condition for phase close to zero is indistinguishable 
+# from static spins, if you also need to include those pixels, 
+# just use: mask = mask_st
+#mask = np.logical_or(mask_fl, np.logical_and(mask_st, np.abs(IMGdata_decoded_PH [:,4,:,:]) > np.pi/2.))
+#mask = mask.astype(np.int16)
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!

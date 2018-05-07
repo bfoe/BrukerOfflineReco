@@ -220,14 +220,17 @@ for k in range (0, dim_reduced):
       for i in range (0,local_combinations.shape[0]):
          PhUnwrap_try[i,:] = IMGdata_decoded_PH_NZ[k,nz]+local_combinations[i,:]            
       avg = np.average (PhUnwrap_try[:,:],axis=(1))
-      chi = np.sum(np.square(PhUnwrap_try[:,:]-avg[:,None]),axis=(1))  
+      chi = np.std (PhUnwrap_try[:,:],axis=(1))      
       min_chi_index = np.argmin (chi)
+      #if chi[min_chi_index]<0.2*avg[min_chi_index]:
       Img_PH_flow_NZ [k] = avg[min_chi_index]
       # just logging
       if not np.array_equal(IMGdata_decoded_PH_NZ[k,nz],PhUnwrap_try[min_chi_index,:]):
           temp = np.zeros (shape=(nfiles),dtype=np.float32)
           temp [nz] = PhUnwrap_try[min_chi_index,:]
-          logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(temp)+'\n')
+          comment = ''
+          #if not chi[min_chi_index]<0.2*avg[min_chi_index]: comment = 'rejected'
+          logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(temp)+'\t'+comment+'\n')
 Img_PH_flow[all_nonzero] = Img_PH_flow_NZ[:] # undo vector reduction   
 Img_PH_flow = Img_PH_flow.reshape (dim[0],dim[1],dim[2]) # undo flatten           
 print (' ')
