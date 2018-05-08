@@ -116,7 +116,7 @@ while answer!="":
         FIDfile = np.append(FIDfile, answer)
         nfiles+=1
 if nfiles==0: print ('ERROR: No input file specified'); sys.exit(2)
-if nfiles==1: print ('ERROR: Need at least 2 files'); sys.exit(2)
+if nfiles <3: print ('ERROR: Need at least 3 files'); sys.exit(2)
 TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
@@ -136,6 +136,8 @@ print ('Starting Phase unwrap')
 #calc parameters for phase unwrap
 mask =  IMGdata_decoded_PH [:,:,:,:] != 0
 venc_arr = np.amax (IMGdata_decoded_PH[:,:,:,:], axis=(0,1,2))
+if np.unique(venc_arr).shape != venc_arr.shape:
+    print ('WARNING: non-unique vencs in input files', venc_arr)
 max_venc = np.amax(venc_arr)
 niter_arr = np.zeros (shape=(nfiles),dtype=np.int32)
 # setup all possible combinations 
@@ -208,8 +210,9 @@ for k in range (0, dim_reduced):
    if k%marker_each == 0: print('.', end='') #progress indicator
    nz = np.nonzero (mask_NZ[k,:].astype(int))[0]
    local_nfiles = np.asarray(nz).shape[0]
-   if local_nfiles == 1: Img_PH_flow_NZ [k]=IMGdata_decoded_PH_NZ[k,nz]
-   else:   
+   #if local_nfiles == 1: Img_PH_flow_NZ [k]=IMGdata_decoded_PH_NZ[k,nz]
+   #else:   
+   if local_nfiles > 2:
       local_combinations=np.unique(PhUnwrap_combinations[:,nz], axis=(0))
       i=0
       while i<local_combinations.shape[0]:

@@ -753,7 +753,7 @@ print('.', end='') #progress indicator
 # use noise in all 8 corners to establish threshold
 image_number = 4 # 0 is static, 4 is flow
 N=10 # use 10% at the corners of the FOV
-std_fac = 6 # how many standard deviations to add
+std_fac = 4 # how many standard deviations to add
 tresh=np.empty(shape=8,dtype=np.float)
 avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
@@ -814,18 +814,18 @@ avg[7]=np.mean(arr)
 std[7]=np.std(arr)
 tresh[7]=avg[7] + std_fac*std[7]
 threshold=np.min(tresh)
-mask = IMGdata_decoded_ABS [:,image_number,:,:] > threshold
-mask = mask.astype(np.int16)
+#mask = IMGdata_decoded_ABS [:,image_number,:,:] > threshold
+#mask = mask.astype(np.int16)
 
-#mask_fl =  IMGdata_decoded_ABS [:,4,:,:] > threshold # 4 is flow
-#mask_st =  IMGdata_decoded_ABS [:,0,:,:] > threshold # 0 is static
+mask_fl =  IMGdata_decoded_ABS [:,4,:,:] > threshold # 4 is flow
+mask_st =  IMGdata_decoded_ABS [:,0,:,:] > threshold # 0 is static
 # put the final mask together
 # the second term takes care of the pixels close to phase wraps
 # an equivalent condition for phase close to zero is indistinguishable 
 # from static spins, if you also need to include those pixels, 
 # just use: mask = mask_st
-#mask = np.logical_or(mask_fl, np.logical_and(mask_st, np.abs(IMGdata_decoded_PH [:,4,:,:]) > np.pi/2.))
-#mask = mask.astype(np.int16)
+mask = np.logical_or(mask_fl, np.logical_and(mask_st, np.abs(IMGdata_decoded_PH [:,4,:,:]) > np.pi/2.))
+mask = mask.astype(np.int16)
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
