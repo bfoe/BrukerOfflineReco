@@ -212,7 +212,7 @@ for k in range (0, dim_reduced):
    local_nfiles = np.asarray(nz).shape[0]
    #if local_nfiles == 1: Img_PH_flow_NZ [k]=IMGdata_decoded_PH_NZ[k,nz]
    #else:   
-   if local_nfiles > 2:
+   if local_nfiles >= 3:
       local_combinations=np.unique(PhUnwrap_combinations[:,nz], axis=(0))
       i=0
       while i<local_combinations.shape[0]:
