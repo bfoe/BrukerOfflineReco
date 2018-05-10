@@ -10,8 +10,10 @@
 #   from scipy_extract import median_filter
 #   from scipy_extract import gaussian_filter
 #
-# be aware that you will also need the file
-# scipy\ndimage\_nd_image.pyd
+# be aware that you will also need the files
+#    scipy\ndimage\_nd_image.pyd
+# and
+#    scipy\ndimage\_ni_label.pyd
 # to be copied to the directory of this script
 #
 
@@ -19,6 +21,7 @@ import numpy
 import sys
 import math
 import _nd_image
+import _ni_label
 
 # --- extracted from:  scipy/_lib/six.py ---
 
@@ -272,14 +275,103 @@ def zoom(input, zoom, output=None, order=3, mode='constant', cval=0.0,
     _nd_image.zoom_shift(filtered, zoom, None, output, order, mode, cval)
     return return_value
 
+    
+# --- extracted from:  scipy/ndimage/measurements.py ---    
+    
+def label(input, structure=None, output=None):
+    input = numpy.asarray(input)
+    if numpy.iscomplexobj(input):
+        raise TypeError('Complex type not supported')
+    if structure is None:
+        structure = generate_binary_structure(input.ndim, 1)
+    structure = numpy.asarray(structure, dtype=bool)
+    if structure.ndim != input.ndim:
+        raise RuntimeError('structure and input must have equal rank')
+    for ii in structure.shape:
+        if ii != 3:
+            raise ValueError('structure dimensions must be equal to 3')
+
+    # Use 32 bits if it's large enough for this image.
+    # _ni_label.label()  needs two entries for background and
+    # foreground tracking
+    need_64bits = input.size >= (2**31 - 2)
+
+    if isinstance(output, numpy.ndarray):
+        if output.shape != input.shape:
+            raise ValueError("output shape not correct")
+        caller_provided_output = True
+    else:
+        caller_provided_output = False
+        if output is None:
+            output = numpy.empty(input.shape, numpy.intp if need_64bits else numpy.int32)
+        else:
+            output = numpy.empty(input.shape, output)
+
+    # handle scalars, 0-dim arrays
+    if input.ndim == 0 or input.size == 0:
+        if input.ndim == 0:
+            # scalar
+            maxlabel = 1 if (input != 0) else 0
+            output[...] = maxlabel
+        else:
+            # 0-dim
+            maxlabel = 0
+        if caller_provided_output:
+            return maxlabel
+        else:
+            return output, maxlabel
+
+    try:
+        max_label = _ni_label._label(input, structure, output)
+    except _ni_label.NeedMoreBits:
+        # Make another attempt with enough bits, then try to cast to the
+        # new type.
+        tmp_output = numpy.empty(input.shape, numpy.intp if need_64bits else numpy.int32)
+        max_label = _ni_label._label(input, structure, tmp_output)
+        output[...] = tmp_output[...]
+        if not numpy.all(output == tmp_output):
+            # refuse to return bad results
+            raise RuntimeError("insufficient bit-depth in requested output type")
+
+    if caller_provided_output:
+        # result was written in-place
+        return max_label
+    else:
+        return output, max_label    
+
+        
+# --- extracted from:  scipy/ndimage/morphology.py ---           
+        
+def generate_binary_structure(rank, connectivity):
+    if connectivity < 1:
+        connectivity = 1
+    if rank < 1:
+        if connectivity < 1:
+            return numpy.array(0, dtype=bool)
+        else:
+            return numpy.array(1, dtype=bool)
+    output = numpy.fabs(numpy.indices([3] * rank) - 1)
+    output = numpy.add.reduce(output, 0)
+    return numpy.asarray(output <= connectivity, dtype=bool)
+        
                               
 # ----------------- test --------------------------- 
-#test = numpy.random.random_sample ((28,28))
-#test = zoom(test[:,:],[0.25,0.25],order=1) # downsample
-#print (test)
-#print ('\n')      
-#test = median_filter(test, size = (3,3)) # median filter
-#s = 2; w = 4; t = (((w - 1)/2)-0.5)/s
-#test[:,:] = gaussian_filter(test[:,:], sigma=s, truncate=t)
-#print (test)
-       
+'''
+test = numpy.random.random_sample ((28,28))
+test = zoom(test[:,:],[0.25,0.25],order=1) # downsample
+print (test)
+print ('\n')      
+test = median_filter(test, size = (3,3)) # median filter
+s = 2; w = 4; t = (((w - 1)/2)-0.5)/s
+test[:,:] = gaussian_filter(test[:,:], sigma=s, truncate=t)
+print (test)
+
+print ('\n')
+print ('\n') 
+mask = test > 0.5; mask = mask.astype(numpy.int16)
+print (mask)
+print ('\n') 
+s = [[1,1,1],[1,1,1],[1,1,1]]
+labeled_mask, num_clusters = label(mask, structure=s)
+print (labeled_mask)
+'''       

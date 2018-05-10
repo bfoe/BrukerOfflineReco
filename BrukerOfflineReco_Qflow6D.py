@@ -65,6 +65,7 @@ if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
    from scipy_extract import zoom
    from scipy_extract import median_filter
    from scipy_extract import gaussian_filter
+   from scipy_extract import label   
 else: # running native python
    from scipy.ndimage import zoom 
    from scipy.ndimage import median_filter 

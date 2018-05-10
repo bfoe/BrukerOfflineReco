@@ -172,9 +172,9 @@ writer.UseCompressionOn ()
 writer.Update()
 
 print ('Regularizing Vector Image')
-image_X = itk.MedianImageFilter (image_X, Radius = 1) #only good forimages without much detail, e.g. phantoms
-image_Y = itk.MedianImageFilter (image_Y, Radius = 1) #only good forimages without much detail, e.g. phantoms
-image_Z = itk.MedianImageFilter (image_Z, Radius = 1) #only good forimages without much detail, e.g. phantoms
+#image_X = itk.MedianImageFilter (image_X, Radius = 1) #only good forimages without much detail, e.g. phantoms
+#image_Y = itk.MedianImageFilter (image_Y, Radius = 1) #only good forimages without much detail, e.g. phantoms
+#image_Z = itk.MedianImageFilter (image_Z, Radius = 1) #only good forimages without much detail, e.g. phantoms
 composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
 composer.SetInput(0, image_X)
 composer.SetInput(1, image_Y)
@@ -188,7 +188,7 @@ composer.SetInput(2, image_Z)
 # lower Timestep idem
 # for smoother images increase IterationNum to 2-5
 # for phantoms with less degree of details IterationNum = 10 is OK
-filtered_image = itk.GradientVectorFlowImageFilter.New(composer.GetOutput(), IterationNum=10, NoiseLevel=2000.0, NumberOfThreads = 2)
+filtered_image = itk.GradientVectorFlowImageFilter.New(composer.GetOutput(), IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
 filtered_image.Update()
 
 print ('Writing regularized Vector Image')
