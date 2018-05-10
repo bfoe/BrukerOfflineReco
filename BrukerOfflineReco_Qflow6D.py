@@ -68,7 +68,8 @@ if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
 else: # running native python
    from scipy.ndimage import zoom 
    from scipy.ndimage import median_filter 
-   from scipy.ndimage import gaussian_filter    
+   from scipy.ndimage import gaussian_filter 
+   from scipy.ndimage import label    
 pyfftw_installed = True
 try: 
     import pyfftw
@@ -753,7 +754,7 @@ print('.', end='') #progress indicator
 # use noise in all 8 corners to establish threshold
 image_number = 4 # 0 is static, 4 is flow
 N=10 # use 10% at the corners of the FOV
-std_fac = 4 # how many standard deviations to add
+std_fac = 6 # how many standard deviations to add
 tresh=np.empty(shape=8,dtype=np.float)
 avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
@@ -814,18 +815,30 @@ avg[7]=np.mean(arr)
 std[7]=np.std(arr)
 tresh[7]=avg[7] + std_fac*std[7]
 threshold=np.min(tresh)
-#mask = IMGdata_decoded_ABS [:,image_number,:,:] > threshold
-#mask = mask.astype(np.int16)
+print('.', end='') #progress indicator
+mask = IMGdata_decoded_ABS [:,image_number,:,:] > threshold
+mask = mask.astype(np.int16)
 
-mask_fl =  IMGdata_decoded_ABS [:,4,:,:] > threshold # 4 is flow
-mask_st =  IMGdata_decoded_ABS [:,0,:,:] > threshold # 0 is static
+#mask_fl =  IMGdata_decoded_ABS [:,4,:,:] > threshold # 4 is flow
+#mask_st =  IMGdata_decoded_ABS [:,0,:,:] > threshold # 0 is static
 # put the final mask together
 # the second term takes care of the pixels close to phase wraps
 # an equivalent condition for phase close to zero is indistinguishable 
 # from static spins, if you also need to include those pixels, 
 # just use: mask = mask_st
-mask = np.logical_or(mask_fl, np.logical_and(mask_st, np.abs(IMGdata_decoded_PH [:,4,:,:]) > np.pi/2.))
-mask = mask.astype(np.int16)
+#mask = np.logical_or(mask_fl, np.logical_and(mask_st, np.abs(IMGdata_decoded_PH [:,4,:,:]) > np.pi/2.))
+#mask = mask.astype(np.int16)
+
+# clear up mask by removing isolated clusters 
+# which are smaller than N interconnected points
+N=20
+s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
+labeled_mask, num_clusters = label(mask, structure=s)
+unique, counts = np.unique(labeled_mask, return_counts=True)
+remove_labels = unique[np.where(counts<=N)] # find clusters with less than N points
+remove_indices = np.where(np.isin(labeled_mask,remove_labels))
+mask[remove_indices] = 0
+print('.', end='') #progress indicator
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
