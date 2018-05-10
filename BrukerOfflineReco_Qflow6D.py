@@ -57,6 +57,7 @@
 from __future__ import print_function
 try: import win32gui, win32console
 except: pass #silent
+import math
 import sys
 import os
 import numpy as np
@@ -832,7 +833,7 @@ mask = mask.astype(np.int16)
 
 # clear up mask by removing isolated clusters 
 # which are smaller than N interconnected points
-N=20
+N = math.ceil( 2.5 * zero_fill**3)
 s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
 labeled_mask, num_clusters = label(mask, structure=s)
 unique, counts = np.unique(labeled_mask, return_counts=True)
