@@ -285,10 +285,10 @@ if haveRef:
     if METHODdata["Method"] != METHODdataRef["Method"] or METHODdata["FlowMode"] != METHODdataRef["FlowMode"]:
         print ('ERROR: Parameter mismatch beteen Main and Reference files (Acquisition Method)'); 
         sys.exit(1)
-    if METHODdata["PVM_EchoTime"] != METHODdataRef["PVM_EchoTime"]:
+    if METHODdata["PVM_EchoTime"] - METHODdataRef["PVM_EchoTime"] > 1e-8:
         print ('ERROR: Parameter mismatch beteen Main and Reference files (TE)'); 
         sys.exit(1)
-    if METHODdata["PVM_RepetitionTime"] != METHODdataRef["PVM_RepetitionTime"]:
+    if METHODdata["PVM_RepetitionTime"] - METHODdataRef["PVM_RepetitionTime"] > 1e-8:
         print ('ERROR: Parameter mismatch beteen Main and Reference files (TR)'); 
         sys.exit(1)
     if METHODdata["FlowRange"] != METHODdataRef["FlowRange"]:
@@ -533,7 +533,7 @@ EchoPosition_raw=50-(50-EchoPosition_raw)/zero_fill
 EchoPosition=int(EchoPosition_raw/100.*dim[0])
 IMGdata=FIDdata
 FIDdata = 0 #free memory
-IMGdata=np.roll(IMGdata, -EchoPosition, axis=(0))
+IMGdata = np.roll(IMGdata, -EchoPosition, axis=(0))
 IMGdata = np.fft.fftshift(IMGdata, axes=(2))
 IMGdata = np.fft.fftshift(IMGdata, axes=(3)); print('.', end='') #progress indicator
 for i in range(0,IMGdata.shape[1]):
