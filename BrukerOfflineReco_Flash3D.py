@@ -39,6 +39,7 @@ try: import win32gui, win32console
 except: pass #silent
 import sys
 import os
+from getopt import getopt
 import numpy as np
 import nibabel as nib
 
@@ -160,12 +161,28 @@ def iFFT3D (array):
         for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(0))
         for i in range(0,array.shape[0]): array[i,:,:] = np.fft.ifft(array[i,:,:], axis=(1))          
     return array 
+
+def checkfile(file): # generic check if file exists
+    if not os.path.isfile(file): 
+        print ('ERROR:  File not found:\n        '+file); exit(1)
+    
+def usage():
+    print ('')
+    print ('Usage: '+Program_name+' [options] --input=<inputfile>')
+    print ('')
+    print ('   Available options are:')
+    print ('       --nopartial   : skip partial fourrier reconstruction')
+    print ('       --noantialias : ignore Brukers anti-alias parameter')
+    print ('       --version     : version information')
+    print ('       -h --help     : this page')    
+    print ('')        
        
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
 Program_name = os.path.basename(sys.argv[0]); 
 if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
+Program_version = "v0.1" # program version
 python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
 # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
 if sys.platform=="win32": os.system("title "+Program_name)
@@ -183,14 +200,37 @@ except: pass
 try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
 except: pass
 TKwindows.update()
-    
+
+# parse commandline parameters (if present)
+try: opts, args =  getopt( sys.argv[1:],'h',['nopartial', 'noantialias','help','version','input='])
+except:
+    error=str(sys.argv[1:]).replace("[","").replace("]","")
+    if "-" in str(error) and not "--" in str(error): 
+          print ('ERROR: Commandline '+str(error)+',   maybe you mean "--"')
+    else: print ('ERROR: Commandline '+str(error))
+    usage(); exit(2)
+if len(args)>0: 
+    print ('ERROR: Commandline option "'+args[0]+'" not recognized')
+    usage(); exit(2)  
+argDict = dict(opts)
+if '-h' in argDict: usage(); exit(0)   
+if '--help' in argDict: usage(); exit(0)  
+if '--version' in argDict: print (Program_name+' '+Program_version); exit(0)
+if '--input' in argDict: FIDfile=argDict['--input']; checkfile(FIDfile)
+else: FIDfile=""
+if '--nopartial' in argDict: partial_fourrier=False
+else: partial_fourrier=True
+if '--noantialias' in argDict: anti_alias=False
+else: anti_alias=True
+
+if FIDfile == "":    
 #intercatively choose input FID file
-FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files","fid")])
-if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
-FIDfile = os.path.abspath(FIDfile) 
-TKwindows.update()
-try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
-except: pass #silent
+    FIDfile = askopenfilename(title="Choose Bruker FID file", filetypes=[("FID files","fid")])
+    if FIDfile == "": print ('ERROR: No FID input file specified'); sys.exit(2)
+    FIDfile = os.path.abspath(FIDfile) 
+    TKwindows.update()
+    try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+    except: pass #silent
 
 #read FID 
 with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -303,7 +343,8 @@ percentual_inc_z=float(last_z+first_z+1-dim[2])/float(last_z-first_z)*100.
 print('.', end='') #progress indicator
 
 min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
-if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual or abs(percentual_inc_z)>min_percentual:
+if partial_fourrier:
+  if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual or abs(percentual_inc_z)>min_percentual:
     #low pass filter for phase correction (function: 1-hanning^2)
     percentage = 10 # center only (lowpass)
     FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
@@ -440,8 +481,10 @@ if abs(percentual_inc_x)>min_percentual or abs(percentual_inc_y)>min_percentual 
         FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
         last_z=dim[2]-first_z 
         compl_conjugate_z = 0 # free memory
-    print('.', end='') #progress indicator 
-        
+    print('.', end='') #progress indicator
+else: #partial fourier recon disabled    
+    print('|', end='') #progress indicator
+    
 #Hanning filter
 percentage = 10.
 npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
@@ -483,16 +526,19 @@ IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))
 print('.', end='') #progress indicator
 
 #throw out antialiasing
-crop=METHODdata["PVM_AntiAlias"]
-dim0start=int((dim[0]-dim[0]/crop[0])/2)
-dim1start=int((dim[1]-dim[1]/crop[1])/2)
-dim2start=int((dim[2]-dim[2]/crop[2])/2)
-dim0end = int(dim0start+dim[0]/crop[0])
-dim1end = int(dim1start+dim[1]/crop[1])
-dim2end = int(dim2start+dim[2]/crop[2])
-IMGdata = IMGdata[dim0start:dim0end,dim1start:dim1end,dim2start:dim2end]
-dim=IMGdata.shape
-print('.', end='') #progress indicator
+if anti_alias:
+    crop=METHODdata["PVM_AntiAlias"]
+    dim0start=int((dim[0]-dim[0]/crop[0])/2)
+    dim1start=int((dim[1]-dim[1]/crop[1])/2)
+    dim2start=int((dim[2]-dim[2]/crop[2])/2)
+    dim0end = int(dim0start+dim[0]/crop[0])
+    dim1end = int(dim1start+dim[1]/crop[1])
+    dim2end = int(dim2start+dim[2]/crop[2])
+    IMGdata = IMGdata[dim0start:dim0end,dim1start:dim1end,dim2start:dim2end]
+    dim=IMGdata.shape
+    print('.', end='') #progress indicator
+else:  
+    print('!', end='') #progress indicator    
 
 #permute dimensions
 #worx for PVM_SPackArrSliceOrient=sagittal, PVM_SPackArrReadOrient="H_F"
