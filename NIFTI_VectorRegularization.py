@@ -102,7 +102,7 @@ TKwindows.update()
 #intercatively choose input NIFTI files
 nfiles=0
 answer="dummy"
-FIDfile1 = askopenfilename(title="Choose NIFTI file X component", filetypes=[("NIFTI files",('*.nii','*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+FIDfile1 = askopenfilename(title="Choose NIFTI file X component", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
 if FIDfile1 == "": print ('ERROR: X input file not specified'); sys.exit(2)
 FIDfile1 = os.path.abspath(FIDfile1) 
 FIDfile2 = askopenfilename(title="Choose NIFTI file Y component", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])

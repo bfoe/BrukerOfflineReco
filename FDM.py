@@ -17,19 +17,6 @@
 
 import numpy as np
 
-def FFT3D (array): # slower but less Memory hungry
-    array = np.fft.fft(array, axis=(0))
-    array = np.fft.fft(array, axis=(1))
-    array = np.fft.fft(array, axis=(2))
-    return array     
-
-
-def iFFT3D (array): # slower but less Memory hungry
-    array = np.fft.ifft(array, axis=(0))
-    array = np.fft.ifft(array, axis=(1))
-    array = np.fft.ifft(array, axis=(2))
-    return array     
-
 # Calculates divergence
 def div (vx,vy,vz,res):
     dx = (vx-np.roll(vx,1,axis=0))/res[0]
@@ -55,11 +42,9 @@ def poisson(f,res):
     lambdaz= -4*np.square(np.sin(Z*np.pi/nz))/res[2]**2     
     mu = ( lambdax + lambday + lambdaz)
     mu[0,0,0] = 1   
-    #u = np.divide(np.fft.fftn(f),mu)    
-    u = np.divide(FFT3D(f),mu) # slower but less Memory hungry
+    u = np.divide(np.fft.fftn(f),mu)    
     u[0,0,0]=0
-    #u = np.real(np.fft.ifftn(u))
-    u = np.real(iFFT3D(u))     # slower but less Memory hungry
+    u = np.real(np.fft.ifftn(u))
     return u
     
 # Finite difference method denoising 
