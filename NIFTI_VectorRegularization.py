@@ -56,6 +56,7 @@ import numpy as np
 import nibabel as nib
 import new # required for ITK work with pyinstaller
 import itk
+import FDM
 
 
 TK_installed=True
@@ -101,7 +102,7 @@ TKwindows.update()
 #intercatively choose input NIFTI files
 nfiles=0
 answer="dummy"
-FIDfile1 = askopenfilename(title="Choose NIFTI file X component", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+FIDfile1 = askopenfilename(title="Choose NIFTI file X component", filetypes=[("NIFTI files",('*.nii','*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
 if FIDfile1 == "": print ('ERROR: X input file not specified'); sys.exit(2)
 FIDfile1 = os.path.abspath(FIDfile1) 
 FIDfile2 = askopenfilename(title="Choose NIFTI file Y component", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
@@ -160,6 +161,13 @@ print ('Reading NIFTI Images')
 image_X = itk.imread(FIDfile1); image_X.Update()
 image_Y = itk.imread(FIDfile2); image_Y.Update()
 image_Z = itk.imread(FIDfile3); image_Z.Update()
+itk_spacing   = image_X.GetSpacing()
+itk_origin    = image_X.GetOrigin() 
+itk_direction = image_X.GetDirection()
+SpatResol = np.zeros(shape=(3),dtype=np.float32)
+SpatResol[0] = itk_spacing[0]
+SpatResol[1] = itk_spacing[1]
+SpatResol[2] = itk_spacing[2]
 
 print ('Writing Vector Image')
 composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
@@ -171,7 +179,8 @@ writer.SetFileName(os.path.join(new_dirname,Vectorfile))
 writer.UseCompressionOn ()
 writer.Update()
 
-print ('Regularizing Vector Image')
+print ('Regularizing Vector Image', end='')
+#print (' Median', end=''), # FDM regularizing
 #image_X = itk.MedianImageFilter (image_X, Radius = 1) #only good forimages without much detail, e.g. phantoms
 #image_Y = itk.MedianImageFilter (image_Y, Radius = 1) #only good forimages without much detail, e.g. phantoms
 #image_Z = itk.MedianImageFilter (image_Z, Radius = 1) #only good forimages without much detail, e.g. phantoms
@@ -179,6 +188,9 @@ composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
 composer.SetInput(0, image_X)
 composer.SetInput(1, image_Y)
 composer.SetInput(2, image_Z)
+composer.Update()
+img=composer.GetOutput()
+
 # IterationNum MUST be = 1
 # txx file says:
 #   m_TimeStep = 0.001; m_NoiseLevel = 200; (lines 31-32)
@@ -188,40 +200,50 @@ composer.SetInput(2, image_Z)
 # lower Timestep idem
 # for smoother images increase IterationNum to 2-5
 # for phantoms with less degree of details IterationNum = 10 is OK
-filtered_image = itk.GradientVectorFlowImageFilter.New(composer.GetOutput(), IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
+print (' ITK', end=''), # ITK regularizing
+filtered_image = itk.GradientVectorFlowImageFilter.New(img, IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
 filtered_image.Update()
+img=filtered_image.GetOutput()
 
+# convert ITK to Numpy Array
+arr = itk.GetArrayFromImage(img)
+print (' FDM', end=''), # FDM regularizing
+[arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
+# convert Numpy Array back to ITK (component wise, directly not worx)
+image_X = itk.GetImageFromArray(arr[:,:,:,0])
+image_Y = itk.GetImageFromArray(arr[:,:,:,1])
+image_Z = itk.GetImageFromArray(arr[:,:,:,2])
+composer2 = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
+composer2.SetInput(0, image_X)
+composer2.SetInput(1, image_Y)
+composer2.SetInput(2, image_Z)
+composer2.Update()
+img=composer2.GetOutput()
+
+print ('')
 print ('Writing regularized Vector Image')
-writer = itk.ImageFileWriter[itk.Image.VF33].New(filtered_image)
+img.SetSpacing(itk_spacing)
+img.SetOrigin(itk_origin)
+img.SetDirection(itk_direction)
+writer = itk.ImageFileWriter[itk.Image.VF33].New(img)
 writer.SetFileName(os.path.join(new_dirname,rVectorfile))
 writer.UseCompressionOn ()
 writer.Update()
 
 # transform ITK images to numpy arrays
-Xcomponent_itk = itk.VectorIndexSelectionCastImageFilter(filtered_image, Index = 0)
+Xcomponent_itk = itk.VectorIndexSelectionCastImageFilter(img, Index = 0)
 Xcomponent_np = itk.GetArrayViewFromImage(Xcomponent_itk)
-Ycomponent_itk = itk.VectorIndexSelectionCastImageFilter(filtered_image, Index = 1)
+Ycomponent_itk = itk.VectorIndexSelectionCastImageFilter(img, Index = 1)
 Ycomponent_np = itk.GetArrayViewFromImage(Ycomponent_itk)
-Zcomponent_itk = itk.VectorIndexSelectionCastImageFilter(filtered_image, Index = 2)
+Zcomponent_itk = itk.VectorIndexSelectionCastImageFilter(img, Index = 2)
 Zcomponent_np = itk.GetArrayViewFromImage(Zcomponent_itk)
-SpatResol = np.zeros(shape=(3),dtype=np.float32)
-SpatResol[0] = Xcomponent_itk.GetSpacing()[0]
-SpatResol[1] = Xcomponent_itk.GetSpacing()[1]
-SpatResol[2] = Xcomponent_itk.GetSpacing()[2]
-
-
 
 # ------------------       ITK code ends here --------------------
-
 
 # still some flips needed :(
 Xcomponent_np = np.transpose (Xcomponent_np, axes=(2,1,0))
 Ycomponent_np = np.transpose (Ycomponent_np, axes=(2,1,0))
 Zcomponent_np = np.transpose (Zcomponent_np, axes=(2,1,0))
-SpatResol_perm = np.zeros(shape=(3),dtype=np.float32)
-SpatResol_perm[0]=SpatResol[2]
-SpatResol_perm[1]=SpatResol[1]
-SpatResol_perm[2]=SpatResol[0]
 
 print ('Writing regularized X,Y,Z Components ', end='')
 image_SOS = np.sqrt(np.square(Xcomponent_np) + np.square(Ycomponent_np) + np.square(Zcomponent_np))
@@ -237,9 +259,9 @@ Zcomponent_np *= 32767./max_ALL; Zcomponent_np = Zcomponent_np.astype(np.int16)
 
 #createNIFTI's
 aff = np.eye(4)
-aff[0,0] = SpatResol_perm[0]; aff[0,3] = -(Xcomponent_np.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol_perm[1]; aff[1,3] = -(Xcomponent_np.shape[1]/2)*aff[1,1]
-aff[2,2] = SpatResol_perm[2]; aff[2,3] = -(Xcomponent_np.shape[2]/2)*aff[2,2]
+aff[0,0] = SpatResol[0]; aff[0,3] = -(Xcomponent_np.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol[1]; aff[1,3] = -(Xcomponent_np.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol[2]; aff[2,3] = -(Xcomponent_np.shape[2]/2)*aff[2,2]
 #write Phase flow X
 NIFTIimg = nib.Nifti1Image(Xcomponent_np[:,:,:], aff)
 NIFTIimg.header['sform_code']=1
