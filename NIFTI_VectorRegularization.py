@@ -209,6 +209,13 @@ img=filtered_image.GetOutput()
 arr = itk.GetArrayFromImage(img)
 print (' FDM', end=''), # FDM regularizing
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
+# use this to mask out slow flow values introduced by FDM
+#mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+#threshold=np.max(mag)*0.01 # 1%
+#mask =  mag [:,:,:] > threshold
+#arr[:,:,:,0] = arr[:,:,:,0]*mask
+#arr[:,:,:,1] = arr[:,:,:,1]*mask
+#arr[:,:,:,2] = arr[:,:,:,2]*mask
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
 image_Y = itk.GetImageFromArray(arr[:,:,:,1])
