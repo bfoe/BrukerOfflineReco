@@ -168,6 +168,10 @@ SpatResol = np.zeros(shape=(3),dtype=np.float32)
 SpatResol[0] = itk_spacing[0]
 SpatResol[1] = itk_spacing[1]
 SpatResol[2] = itk_spacing[2]
+#calc average velocity over all nonzero voxels
+mag = np.sqrt(np.square(itk.GetArrayFromImage(image_X))+np.square(itk.GetArrayFromImage(image_Y))+np.square(itk.GetArrayFromImage(image_Z)))
+nonzero_mag =  np.nonzero(mag)
+avg_flow_orig = np.average(mag[nonzero_mag])
 
 print ('Writing Vector Image')
 composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
@@ -207,15 +211,19 @@ img=filtered_image.GetOutput()
 
 # convert ITK to Numpy Array
 arr = itk.GetArrayFromImage(img)
-print (' FDM', end=''), # FDM regularizing
+print (' FDM'), # FDM regularizing
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
-# use this to mask out slow flow values introduced by FDM
+# ENABLE THIS TO renormalize after filtering
+#calc average velocity over all nonzero voxels (after filtering)
 #mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+#avg_flow_filtered = np.average(mag[nonzero_mag])
+#renormalize = avg_flow_orig/avg_flow_filtered
+#print ("Renormalizing ", renormalize)
+#arr *= renormalize
+# ENABLE THIS TO mask out slow flow values introduced by FDM
 #threshold=np.max(mag)*0.01 # 1%
 #mask =  mag [:,:,:] > threshold
-#arr[:,:,:,0] = arr[:,:,:,0]*mask
-#arr[:,:,:,1] = arr[:,:,:,1]*mask
-#arr[:,:,:,2] = arr[:,:,:,2]*mask
+#arr[:,:,:,:] *= mask [:,:,:,None]
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
 image_Y = itk.GetImageFromArray(arr[:,:,:,1])
@@ -227,7 +235,6 @@ composer2.SetInput(2, image_Z)
 composer2.Update()
 img=composer2.GetOutput()
 
-print ('')
 print ('Writing regularized Vector Image')
 img.SetSpacing(itk_spacing)
 img.SetOrigin(itk_origin)
