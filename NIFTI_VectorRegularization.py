@@ -57,6 +57,10 @@ import nibabel as nib
 import new # required for ITK work with pyinstaller
 import itk
 import FDM
+if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
+   from scipy_extract import label   
+else: # running native python
+   from scipy.ndimage import label 
 
 
 TK_installed=True
@@ -195,17 +199,15 @@ composer.SetInput(2, image_Z)
 composer.Update()
 img=composer.GetOutput()
 
-# IterationNum MUST be = 1
+# from: http://itk-users.7.n7.nabble.com/units-of-SetNoiseLevel-in-itkGradientVectorFlowImageFilter-td20115.html
 # txx file says:
 #   m_TimeStep = 0.001; m_NoiseLevel = 200; (lines 31-32)
 #   m_TimeStep = 0.2/m_NoiseLevel; (line 56)
-# from: http://itk-users.7.n7.nabble.com/units-of-SetNoiseLevel-in-itkGradientVectorFlowImageFilter-td20115.html
 # higher NoiseLevel smooth more
-# lower Timestep idem
 # for smoother images increase IterationNum to 2-5
 # for phantoms with less degree of details IterationNum = 10 is OK
 print (' ITK', end=''), # ITK regularizing
-filtered_image = itk.GradientVectorFlowImageFilter.New(img, IterationNum=1, NoiseLevel=2000.0, NumberOfThreads = 2)
+filtered_image = itk.GradientVectorFlowImageFilter.New(img, IterationNum=3, NoiseLevel=2000.0, NumberOfThreads = 2)
 filtered_image.Update()
 img=filtered_image.GetOutput()
 
@@ -213,17 +215,31 @@ img=filtered_image.GetOutput()
 arr = itk.GetArrayFromImage(img)
 print (' FDM'), # FDM regularizing
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
-# ENABLE THIS TO renormalize after filtering
-#calc average velocity over all nonzero voxels (after filtering)
-#mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
-#avg_flow_filtered = np.average(mag[nonzero_mag])
-#renormalize = avg_flow_orig/avg_flow_filtered
-#print ("Renormalizing ", renormalize)
-#arr *= renormalize
-# ENABLE THIS TO mask out slow flow values introduced by FDM
-#threshold=np.max(mag)*0.01 # 1%
-#mask =  mag [:,:,:] > threshold
-#arr[:,:,:,:] *= mask [:,:,:,None]
+#mask out slow flow values introduced by FDM
+mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+threshold=np.max(mag)*0.01 # 1%
+mask =  mag [:,:,:] > threshold
+# clear up mask: leave only the largest cluster of connected points
+s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
+labeled_mask, num_clusters = label(mask, structure=s)
+unique, counts = np.unique(labeled_mask, return_counts=True)
+max_count=0
+for i in range(0,unique.shape[0]): # find the largest nonzero count
+    if counts[i]>max_count and unique[i]!=0: max_count=counts[i]
+remove_labels = unique[np.where(counts<max_count)] # leave only the largest cluster of connected points
+remove_indices = np.where(np.isin(labeled_mask,remove_labels))
+mask[remove_indices] = 0
+#apply mask
+arr[:,:,:,:] *= mask [:,:,:,None]
+
+#Renormalize over all nonzero voxels
+mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+nonzero_mag =  np.nonzero(mag)
+avg_flow_filtered = np.average(mag[nonzero_mag])
+renormalize = avg_flow_orig/avg_flow_filtered
+print ("Renormalizing ", renormalize)
+arr *= renormalize
+
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
 image_Y = itk.GetImageFromArray(arr[:,:,:,1])

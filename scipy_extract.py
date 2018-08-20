@@ -5,10 +5,12 @@
 #   from scipy.ndimage import zoom 
 #   from scipy.ndimage import median_filter 
 #   from scipy.ndimage import gaussian_filter 
+#   from scipy.ndimage import label
 # you can import from here as:   
 #   from scipy_extract import zoom
 #   from scipy_extract import median_filter
 #   from scipy_extract import gaussian_filter
+#   from scipy_extract import label
 #
 # be aware that you will also need the files
 #    scipy\ndimage\_nd_image.pyd
