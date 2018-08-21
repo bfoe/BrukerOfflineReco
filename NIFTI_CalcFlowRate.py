@@ -39,14 +39,10 @@ except: pass #silent
 import math
 import sys
 import os
+import zlib
 import numpy as np
 import nibabel as nib
-'''
-if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
-   from scipy_extract import label   
-else: # running native python
-   from scipy.ndimage import label 
-'''
+
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -63,7 +59,17 @@ if not TK_installed:
     print ('       on MacOS install ActiveTcl from:')
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
-    
+
+def ParseSingleValue(val):
+    try: # check if int
+        result = int(val)
+    except ValueError:
+        try: # then check if float
+            result = float(val)
+        except ValueError:
+            # if not, should  be string. Remove  newline character.
+            result = val.rstrip('\n')
+    return result    
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -89,43 +95,114 @@ except: pass
 TKwindows.update()
     
 #intercatively choose input NIFTI file
-InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('*.mha','*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
 if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
 InputFile = os.path.abspath(InputFile)
 TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
-
-print ('Reading NIFTI file')
-img = nib.load(InputFile)
-data = img.get_data().astype(np.float32)
-SpatResol = img.header.get_zooms()
-'''
-#mask out low flow values
-threshold=np.max(data)*0.01 # 1%
-mask =  data [:,:,:] > threshold
-
-# clear up mask: leave only the largest cluster of connected points
-print ('Calculating ...')
-s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
-labeled_mask, num_clusters = label(mask, structure=s)
-unique, counts = np.unique(labeled_mask, return_counts=True)
-max_count=0
-for i in range(0,unique.shape[0]): # find the largest nonzero count
-    if counts[i]>max_count and unique[i]!=0: max_count=counts[i]
-remove_labels = unique[np.where(counts<max_count)] # leave only the largest cluster of connected points
-remove_indices = np.where(np.isin(labeled_mask,remove_labels))
-mask[remove_indices] = 0
-
-# apply mask
-data[:,:,:] *= mask [:,:,:]
-'''
-
-#write flowvolume results
-print ('Writing flow rate file')
 dirname  = os.path.dirname(InputFile)
 basename = os.path.basename(InputFile)
 filename = os.path.splitext(InputFile)[0]
+extension = os.path.splitext(InputFile)[1].lower()
+
+if extension != ".mha":
+    print ('Reading NIFTI file')
+    img = nib.load(InputFile)
+    data = img.get_data().astype(np.float32)
+    SpatResol = img.header.get_zooms()
+else:
+    print ('Reading MHA file')
+    #read MHA header 
+    end_header=False
+    header_dict = {}
+    with open(InputFile, "rb") as f:
+        while not end_header:
+            line = f.readline()    
+            (param_name, current_line) = line.split('=') #split at "=" and strip of spaces
+            param_name = param_name.strip()
+            current_line = current_line.strip()
+            value = ParseSingleValue(current_line)
+            header_dict[param_name] = value
+            if param_name == 'ElementDataFile': end_header=True
+        rawdata = f.read()
+        
+    #extract relevant parameters from header and check for not implemented stuff
+    try: objecttype = header_dict["ObjectType"]
+    except: print ('ERROR: Parameter "ObjectType" not found in MHA header'); sys.exit(2);
+    if objecttype !='Image': print ('ERROR: ObjectType must be "Image"'); sys.exit(2);
+    try: ndim = header_dict["NDims"]
+    except: print ('ERROR: Parameter "NDims" not found in MHA header'); sys.exit(2);
+    if ndim !=3: print ('ERROR: Parameter "NDims"<>3 not implemented'); sys.exit(2);
+    try: binarydata = header_dict["BinaryData"]
+    except: print ('ERROR: Parameter "BinaryData" not found in MHA header'); sys.exit(2);
+    if binarydata !='True': print ('ERROR: only format with BinaryData implemented'); sys.exit(2);
+    try: order = header_dict["BinaryDataByteOrderMSB"]
+    except: print ('Warning: Parameter "BinaryDataByteOrderMSB" not found assuming "False"'); order='False'
+    if order !='False': print ('ERROR: only format with BinaryDataByteOrderMSB=Flase implemented'); sys.exit(2);
+    try: compressed = header_dict["CompressedData"]
+    except: print ('Warning: Parameter "CompressedData" not found assuming "False"'); compressed='False'
+    if compressed =='True': compressed=True
+    else: compressed=False
+    try: Resolution = header_dict["ElementSpacing"]
+    except: print ('ERROR: Parameter "ElementSpacing" not found in MHA header'); sys.exit(2);
+    try:
+        SpatResol = np.zeros ((3), dtype=np.float32)
+        Resolution  = Resolution.split()
+        SpatResol[0] = float (Resolution[0])
+        SpatResol[1] = float (Resolution[1])
+        SpatResol[2] = float (Resolution[2])
+    except: print ('ERROR: Problem parsing parameter "ElementSpacing"'); sys.exit(2);
+    try: dims = header_dict["DimSize"]
+    except: print ('ERROR: Parameter "DimSize" not found in MHA header'); sys.exit(2);
+    try:
+        dims  = dims.split()
+        dim1 = int (dims[0])
+        dim2 = int (dims[1])
+        dim3 = int (dims[2])
+    except: print ('ERROR: Problem parsing parameter "DimSize"'); sys.exit(2);
+    try: veclen = header_dict["ElementNumberOfChannels"]
+    except: print ('ERROR: Parameter "ElementNumberOfChannels" not found in MHA header'); sys.exit(2);
+    if veclen !=3: print ('ERROR: Parameter "ElementNumberOfChannels"<>3 not implemented'); sys.exit(2);
+    try: datatype = header_dict["ElementType"]
+    except: print ('ERROR: Parameter "ElementType" not found in MHA header'); sys.exit(2);
+    if datatype !='MET_FLOAT': print ('ERROR: ElementType must be "MET_FLOAT"'); sys.exit(2);
+    try: datalocation = header_dict["ElementDataFile"]
+    except: print ('ERROR: Parameter "ElementDataFile" not found in MHA header'); sys.exit(2);
+    if datalocation !='LOCAL': print ('ERROR: Parameter "ElementDataFile" must be "LOCAL"'); sys.exit(2);
+    print('.', end='') #progress indicator
+    # paramters that are ignored: TransformMatrix, Offset, CenterOfRotation, AnatomicalOrientation, CompressedDataSize
+
+    #decode binary string to floats
+    if compressed: rawdata = zlib.decompress(rawdata); print('.', end='') #progress indicator
+    if (len(rawdata) % 4) > 0:
+        print ("Warning: Data length not a multiple of 4, truncating ....")
+        length = int(len(rawdata)/4.0)*4
+        rawdata = rawdata[0:length]
+    if (len(rawdata)) > dim1*dim2*dim3*veclen*4:
+        print ("Warning: Data length larger than expected, truncating ....")
+        rawdata = rawdata[0:int(dim1*dim2*dim3*veclen*4)]    
+    if (len(rawdata)) < dim1*dim2*dim3*veclen*4:
+        print ("ERROR: Data length less than expected")
+        sys.exit(2)
+    data = np.fromstring (rawdata, dtype=np.float32)
+    print('.', end='') #progress indicator    
+    data = data.reshape(dim3,dim2,dim1,veclen)
+    print('.', end='') #progress indicator
+    #find main flow component
+    flow_components=np.sum(data[:,:,:,:],axis=(0,1,2))
+    main_component = np.argmax(flow_components)
+    data = data [:,:,:,main_component]
+   
+   
+#find main flow direction (suposed to be the largest extension of the volume)
+flow_directions = np.argsort(data.shape)
+flow_directions = flow_directions[::-1] # decreasing order
+data = np.transpose(data, flow_directions)
+
+#write flowvolume results
+print ('Writing flow rate file')
+
 with open(os.path.join(dirname,filename+'_FlowVolumes.txt'), "w") as text_file:    
     text_file.write("Flow Volumes per slice (X):\n")
     for i in range(0,data.shape[0]): # in our data shape[2] is the main flow direction
