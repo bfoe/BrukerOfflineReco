@@ -78,7 +78,13 @@ if not TK_installed:
     print ('       on MacOS install ActiveTcl from:')
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
-    
+
+def smooth(x,window_len):
+    w=np.hanning(window_len)
+    s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
+    w=np.hanning(window_len)
+    y=np.convolve(w/w.sum(),s,mode='same')
+    return y[window_len:-window_len+1]  
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -232,13 +238,45 @@ mask[remove_indices] = 0
 #apply mask
 arr[:,:,:,:] *= mask [:,:,:,None]
 
-#Renormalize over all nonzero voxels
+#Local Renormalization over all nonzero voxels
+#find main flow component
+flow_components=np.sum(arr[:,:,:,:],axis=(0,1,2))
+main_component = np.argmax(flow_components)
+#find main flow direction (suposed to be the largest extension of the volume)
+flow_directions = np.argsort(arr.shape[0:3])
+flow_directions = flow_directions[::-1] # decreasing order
+flow_directions = np.append (flow_directions,3)
+#calculate flow volume profile along main flow component and direction
+flowvol = np.zeros(arr.shape[flow_directions[0]], dtype=np.float32)
+for i in range(0,arr.shape[flow_directions[0]]): 
+    flowvol[i] = np.sum(np.transpose(arr,flow_directions)[i,:,:,main_component])
+# prepare normalization    
+flowvol = smooth(flowvol,40)
+flowvol_normalize = np.zeros(flowvol.shape, dtype=np.float32)
+flowvol_normalize.fill (1.0)
+nzero = np.nonzero(flowvol)
+flowvol_avg = np.average(flowvol[nzero])
+flowvol_normalize [nzero] = flowvol_avg/flowvol[nzero]
+# do normalization 
+if flow_directions[0]==0:
+    for i in range(0,arr.shape[0]): 
+        arr [i,:,:,:] *= flowvol_normalize[i]
+elif flow_directions[0]==1:           
+    for i in range(0,arr.shape[1]): 
+        arr [:,i,:,:] *= flowvol_normalize[i]
+elif flow_directions[0]==2:           
+    for i in range(0,arr.shape[2]): 
+        arr [:,:,i,:] *= flowvol_normalize[i]
+else:
+    print ("Warning unknown case for main flow direction ", flow_directions[0] )            
+
+#Global Renormalization over all nonzero voxels
 mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
 nonzero_mag =  np.nonzero(mag)
 avg_flow_filtered = np.average(mag[nonzero_mag])
 renormalize = avg_flow_orig/avg_flow_filtered
 print ("Renormalizing ", renormalize)
-arr *= renormalize
+arr *= renormalize    
 
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])

@@ -70,6 +70,16 @@ def ParseSingleValue(val):
             # if not, should  be string. Remove  newline character.
             result = val.rstrip('\n')
     return result    
+
+def smooth(x,window_len):
+    print ('')
+    print ("x.shape = ",x.shape)
+    print ("window_leg = ",window_len)
+    w=np.hanning(window_len)
+    s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
+    w=np.hanning(window_len)
+    y=np.convolve(w/w.sum(),s,mode='same')
+    return y[window_len:-window_len+1]  
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -110,7 +120,7 @@ if extension != ".mha":
     print ('Reading NIFTI file')
     img = nib.load(InputFile)
     data = img.get_data().astype(np.float32)
-    SpatResol = img.header.get_zooms()
+    SpatResol = np.asarray(img.header.get_zooms())
 else:
     print ('Reading MHA file')
     #read MHA header 
@@ -198,7 +208,9 @@ else:
 #find main flow direction (suposed to be the largest extension of the volume)
 flow_directions = np.argsort(data.shape)
 flow_directions = flow_directions[::-1] # decreasing order
+#change order according to main flow direction
 data = np.transpose(data, flow_directions)
+SpatResol = SpatResol [flow_directions]
 
 #write flowvolume results
 print ('Writing flow rate file')
@@ -206,12 +218,12 @@ print ('Writing flow rate file')
 with open(os.path.join(dirname,filename+'_FlowVolumes.txt'), "w") as text_file:    
     text_file.write("Flow Volumes per slice (X):\n")
     for i in range(0,data.shape[0]): # in our data shape[2] is the main flow direction
-        flowvol = np.sum(data[i,:,:])
+        flowvol = np.sum(data[i,:,:])       
         flowvol = abs(flowvol)
-        flowvol *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s
+        flowvol *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s       
         flowvol *= SpatResol[1]/1000.*SpatResol[2]/1000. # multiply with inplane spatial resolution, result is in mm^3/s
-        flowvol /= 1000. # convert mm^3/s ---> ml/s
-        text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
+        flowvol /= 1000. # convert mm^3/s ---> ml/s       
+        text_file.write("Slice %d:\t%e\tml/s\n" % (i, flowvol)) # changed: %0.2f --> %e
     text_file.write("\n")        
 
 
