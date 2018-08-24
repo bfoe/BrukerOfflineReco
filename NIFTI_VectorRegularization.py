@@ -240,7 +240,7 @@ arr[:,:,:,:] *= mask [:,:,:,None]
 
 #Local Renormalization over all nonzero voxels
 #find main flow component
-flow_components=np.sum(arr[:,:,:,:],axis=(0,1,2))
+flow_components=np.abs(np.sum(arr[:,:,:,:],axis=(0,1,2)))
 main_component = np.argmax(flow_components)
 #find main flow direction (suposed to be the largest extension of the volume)
 flow_directions = np.argsort(arr.shape[0:3])

@@ -200,11 +200,11 @@ else:
     data = data.reshape(dim3,dim2,dim1,veclen)
     print('.', end='') #progress indicator
     #find main flow component
-    flow_components=np.sum(data[:,:,:,:],axis=(0,1,2))
+    flow_components=np.abs(np.sum(data[:,:,:,:],axis=(0,1,2)))
     main_component = np.argmax(flow_components)
     data = data [:,:,:,main_component]
-   
-   
+    
+    
 #find main flow direction (suposed to be the largest extension of the volume)
 flow_directions = np.argsort(data.shape)
 flow_directions = flow_directions[::-1] # decreasing order
