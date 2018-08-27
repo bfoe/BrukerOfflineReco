@@ -178,10 +178,9 @@ SpatResol = np.zeros(shape=(3),dtype=np.float32)
 SpatResol[0] = itk_spacing[0]
 SpatResol[1] = itk_spacing[1]
 SpatResol[2] = itk_spacing[2]
-#calc average velocity over all nonzero voxels
+#calc velocity over all voxels
 mag = np.sqrt(np.square(itk.GetArrayFromImage(image_X))+np.square(itk.GetArrayFromImage(image_Y))+np.square(itk.GetArrayFromImage(image_Z)))
-nonzero_mag =  np.nonzero(mag)
-avg_flow_orig = np.average(mag[nonzero_mag])
+flow_sum_orig = np.sum(mag)
 
 print ('Writing Vector Image')
 composer = itk.ComposeImageFilter[itk.Image.F3, itk.Image.VF33].New()
@@ -193,8 +192,7 @@ writer.SetFileName(os.path.join(new_dirname,Vectorfile))
 writer.UseCompressionOn ()
 writer.Update()
 
-print ('Regularizing Vector Image', end='')
-#print (' Median', end=''), # FDM regularizing
+print ('Regularizing Vector Image: ITK filter')
 #image_X = itk.MedianImageFilter (image_X, Radius = 1) #only good forimages without much detail, e.g. phantoms
 #image_Y = itk.MedianImageFilter (image_Y, Radius = 1) #only good forimages without much detail, e.g. phantoms
 #image_Z = itk.MedianImageFilter (image_Z, Radius = 1) #only good forimages without much detail, e.g. phantoms
@@ -212,14 +210,19 @@ img=composer.GetOutput()
 # higher NoiseLevel smooth more
 # for smoother images increase IterationNum to 2-5
 # for phantoms with less degree of details IterationNum = 10 is OK
-print (' ITK', end=''), # ITK regularizing
 filtered_image = itk.GradientVectorFlowImageFilter.New(img, IterationNum=3, NoiseLevel=2000.0, NumberOfThreads = 2)
 filtered_image.Update()
 img=filtered_image.GetOutput()
 
 # convert ITK to Numpy Array
 arr = itk.GetArrayFromImage(img)
-print (' FDM'), # FDM regularizing
+#Global Renormalization to correct effects from ITK filter
+mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+flow_sum_filtered = np.sum(mag)
+renormalize = flow_sum_orig/flow_sum_filtered
+print ("Global Renormalization: %0.2f" % renormalize)
+arr *= renormalize    
+print ('Regularizing Vector Image: FDM filter')
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
 #mask out slow flow values introduced by FDM
 mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
@@ -239,6 +242,7 @@ mask[remove_indices] = 0
 arr[:,:,:,:] *= mask [:,:,:,None]
 
 #Local Renormalization over all nonzero voxels
+print ('Equalizing flow volume over main flow direction:', end = '')
 #find main flow component
 flow_components=np.abs(np.sum(arr[:,:,:,:],axis=(0,1,2)))
 main_component = np.argmax(flow_components)
@@ -269,14 +273,17 @@ elif flow_directions[0]==2:
         arr [:,:,i,:] *= flowvol_normalize[i]
 else:
     print ("Warning unknown case for main flow direction ", flow_directions[0] )            
-
-#Global Renormalization over all nonzero voxels
-mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
-nonzero_mag =  np.nonzero(mag)
-avg_flow_filtered = np.average(mag[nonzero_mag])
-renormalize = avg_flow_orig/avg_flow_filtered
-print ("Renormalizing ", renormalize)
-arr *= renormalize    
+#print average flow volume/s in main direction
+flowvol = np.zeros(arr.shape[flow_directions[0]], dtype=np.float32)
+SpatResol_perm = SpatResol [flow_directions[0:3]]    
+for i in range(0,arr.shape[flow_directions[0]]): 
+    flowvol[i] = np.sum(np.transpose(arr,flow_directions)[i,:,:,main_component])
+nz = np.nonzero(flowvol)
+avg_flow_volume = np.average(np.abs(flowvol[nz]))
+avg_flow_volume *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s       
+avg_flow_volume *= SpatResol_perm[1]/1000.*SpatResol_perm[2]/1000. # multiply with inplane spatial resolution, result is in mm^3/s
+avg_flow_volume /= 1000. # convert mm^3/s ---> ml/s       
+print (' %0.2f ml/s' % avg_flow_volume)   
 
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
