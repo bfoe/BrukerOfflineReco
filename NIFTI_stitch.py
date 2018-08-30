@@ -132,7 +132,7 @@ if directions[0]!=1: print ('ERROR: largest dimension is not index 1, not implem
 overlap=int(0.05*data1.shape[1]) #5%
 overlap=int(overlap/2)*2 # make it even
 print ('Overlap is ',overlap)
-stitch_search_range = int(0.20*data1.shape[1]) #25%
+stitch_search_range = int(0.25*data1.shape[1]) #25%
 print ('Shift search range is 0..'+str(2*stitch_search_range))
 roll1_search_range  = int(0.05*data1.shape[0]) #5%
 print ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
@@ -174,25 +174,26 @@ print ('Optimal roll1 found at',max_j)
 print ('Optimal roll2 found at',max_k)
 
               
-#delete some points
-#data1 = data1[:,0:data1.shape[1]+1,:] #full
-#data2 = data2[:,0:data1.shape[1]+1,:] #full
-#data1 = data1[:,0:data1.shape[1]+1-78,:] #OK
-#data2 = data2[:,50:data2.shape[1]+1,:]   #OK 
-#data2 = np.roll (data2,2, axis=0)        #OK 
-#data2 = np.roll (data2,5, axis=2)        #OK
+#initialize join
 crop1 = int(max_i/2)
 crop2 = max_i-crop1
 crop1 += int(overlap/2)
 crop2 += int(overlap/2)
-#data1 = data1[:,0:data1.shape[1]+1-crop1,:] #looks worse
-data1 = data1[:,0:data1.shape[1]-crop1,:] #looks better
-data2 = data2[:,crop2:data2.shape[1]+1,:]   
 data2 = np.roll (data2,max_j, axis=0)
 data2 = np.roll (data2,max_k, axis=2)
+data = np.zeros ((data1.shape[0],data1.shape[1]+data2.shape[1]-crop1-crop2,data1.shape[2]),dtype=np.float32)
+hanning1 = np.zeros(overlap,dtype=np.float32)
+hanning2 = np.zeros(overlap,dtype=np.float32)
+x_ = np.linspace (0,np.pi/2,num=overlap+2); x_ = x_[1:overlap+1]
+# do join
+data [:,0:data1.shape[1]-crop1,:] = data1[:,0:data1.shape[1]-crop1,:]
+data [:,data1.shape[1]-crop1:-1,:] = data2[:,crop2:-1,:]
+test1 = data1[:,data1.shape[1]-crop1-overlap/2:data1.shape[1]-crop1+overlap/2,:]
+test2 = data2[:,crop2-overlap/2:crop2+overlap/2,:]
+hanning1 [0:overlap] = np.power(np.cos(x_),2)
+hanning2 = 1-hanning1
+data [:,data1.shape[1]-crop1-overlap/2:data1.shape[1]-crop1+overlap/2,:] = test1[:,:,:]*hanning1[None,:,None] + test2[:,:,:]*hanning2[None,:,None]
 
-#concat
-data = np.concatenate ((data1, data2), axis=1)
     
 #transform to int 
 max_data = np.amax(data);

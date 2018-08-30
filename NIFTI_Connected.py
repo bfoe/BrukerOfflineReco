@@ -138,7 +138,7 @@ elif directions[0]==1: d=data[:,data.shape[1]/4:data.shape[1]*3/4,:]
 else:                  d=data[:,:,data.shape[2]/4:data.shape[2]*3/4]
 #calculate histogram
 n_points=d.shape[0]*d.shape[1]*d.shape[2]
-steps=int(n_points/100000); start=0; fin=np.max(data [:,:,:])
+steps=int(n_points/10000); start=0; fin=np.max(data [:,:,:])
 xbins =  np.linspace(start,fin,steps)
 ybins, binedges = np.histogram(d[:,:,:], bins=xbins)
 ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
