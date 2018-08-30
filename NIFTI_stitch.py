@@ -59,18 +59,52 @@ if not TK_installed:
     print ('       on MacOS install ActiveTcl from:')
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
-
-def ParseSingleValue(val):
-    try: # check if int
-        result = int(val)
-    except ValueError:
-        try: # then check if float
-            result = float(val)
-        except ValueError:
-            # if not, should  be string. Remove  newline character.
-            result = val.rstrip('\n')
-    return result    
- 
+  
+def smooth(x,window_len):
+    w=np.hanning(window_len)
+    s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
+    w=np.hanning(window_len)
+    y=np.convolve(w/w.sum(),s,mode='same')
+    return y[window_len:-window_len+1]   
+    
+def anlyze_histogram (d):
+    d=d.flatten()     
+    n_points=d.shape[0]
+    steps=int(n_points/1000); start=0; fin=np.max(d)
+    xbins =  np.linspace(start,fin,steps)
+    ybins, binedges = np.histogram(d, bins=xbins)
+    ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
+    xbins = xbins[1:-1] # through out first point (lots of counts)
+    ybins = ybins[1:-1] # through out first point (lots of counts)
+    nz = np.nonzero (ybins)
+    xbins = xbins[nz] # through out histogram points with zero count (basically the initial points)
+    ybins = ybins[nz] # through out histogram points with zero count (basically the initial points)
+    ybins = smooth(ybins,ybins.shape[0]/20)
+    #find minimum
+    start=ybins.argmax()
+    i=start;x_min=0;y_min=ybins[start]
+    while i<len(ybins):
+        i+=1
+        if ybins[i]<=y_min: y_min=ybins[i]; x_min=i; 
+        else: i=len(ybins);
+    minimum=xbins[x_min]
+    #find maximum
+    start=x_min
+    i=start;x_max=0;y_max=ybins[start]
+    while i<len(ybins):
+        i+=1
+        if ybins[i]>y_max: y_max=ybins[i]; x_max=i; 
+        else: i=len(ybins);
+    maximum=xbins[x_max]
+    i=len(ybins)-1
+    points=0; threshold = 0
+    while i>0:
+       points += ybins[i]
+       threshold = xbins[i]   
+       if points >  n_points*0.02: #2%
+          i=1
+       i -= 1     
+    return minimum, maximum, threshold
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -121,6 +155,15 @@ img2 = nib.load(InputFile2)
 data2 = img2.get_data().astype(np.float32)
 SpatResol2 = np.asarray(img2.header.get_zooms())
 
+
+# histogram correction
+min1, max1, high1 = anlyze_histogram(data1)
+min2, max2, high2 = anlyze_histogram(data2)
+factor = high2/high1
+data2 /= factor
+print ('Histogram correction: %0.2f' % factor)
+
+
 #some checks
 if not np.array_equal(data1.shape,data2.shape): print ('ERROR: image dimension mismatch'); sys.exit(2)
 if not np.array_equal(SpatResol1,SpatResol2): print ('ERROR: image resolution mismatch'); sys.exit(2)
@@ -140,6 +183,7 @@ roll2_search_range  = int(0.05*data1.shape[0]) #5%
 print ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
 goodness = np.zeros ((2*stitch_search_range, 2*roll1_search_range+1, 2*roll2_search_range+1),dtype=np.float64)
 #find match
+
 print ('optimizing ',end='')
 for i in range (0,stitch_search_range):
    print ('.',end='')
@@ -172,7 +216,6 @@ for i in range (0,2*stitch_search_range):
 print ('Optimal shift found at',max_i)
 print ('Optimal roll1 found at',max_j)
 print ('Optimal roll2 found at',max_k)
-
               
 #initialize join
 crop1 = int(max_i/2)
