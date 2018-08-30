@@ -144,8 +144,7 @@ except: pass #silent
 dirname  = os.path.dirname(InputFile1)
 basename = os.path.basename(InputFile1)
 filename = os.path.splitext(InputFile1)[0]
-extension = os.path.splitext(InputFile1)[1].lower()
-filename = filename[0:filename.rfind('_')]
+filename = os.path.splitext(filename)[0]
 filename_connected = filename+'_Stitched.nii.gz'
 
 
