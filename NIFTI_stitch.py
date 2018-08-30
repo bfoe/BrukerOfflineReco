@@ -1,5 +1,7 @@
 #
-# This tool reads two NIFTI files and stiches them together
+# This tool reads two NIFTI files and stiches them together along the largest dimension
+# using simple correlation as similarity criterium and (bruteforce) searching over a 
+# subset of possible translations (3 degrees  of freedom)
 #      
 #
 # ----- VERSION HISTORY -----
@@ -143,8 +145,8 @@ dirname  = os.path.dirname(InputFile1)
 basename = os.path.basename(InputFile1)
 filename = os.path.splitext(InputFile1)[0]
 extension = os.path.splitext(InputFile1)[1].lower()
-filename = filename[0:filename.rfind('*.nii.gz')]
-filename_connected = filename+'_stitched.nii.gz'
+filename = filename[0:filename.rfind('_')]
+filename_connected = filename+'_Stitched.nii.gz'
 
 
 print ('Reading NIFTI files')
