@@ -63,7 +63,12 @@ if not TK_installed:
     print ('       on MacOS install ActiveTcl from:')
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
-  
+
+def lprint (text):
+    print (text);
+    logfile.write(text+'\n')
+    logfile.flush()
+    
 def smooth(x,window_len):
     w=np.hanning(window_len)
     s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
@@ -173,9 +178,12 @@ if __name__ == '__main__':
     filename = os.path.splitext(InputFile1)[0]
     filename = os.path.splitext(filename)[0]
     filename_connected = filename+'_Stitched.nii.gz'
+    logname = filename+'_Stitched.log'
+    try: logfile = open(os.path.join(dirname,logname), "w")
+    except: print ('ERROR opening logfile'); sys.exit(2)
 
-
-    print ('Reading NIFTI files')
+    lprint ('Reading NIFTI files')
+    logfile.write(InputFile1+'\n'); logfile.write(InputFile2+'\n'); logfile.flush()
     img1 = nib.load(InputFile1)
     data1 = img1.get_data().astype(np.float32)
     SpatResol1 = np.asarray(img1.header.get_zooms())
@@ -189,30 +197,30 @@ if __name__ == '__main__':
     min2, max2, high2 = anlyze_histogram(data2)
     factor = high2/high1
     data2 /= factor
-    print ('Histogram correction: %0.2f' % factor)
+    lprint ('Histogram correction: %0.2f' % factor)
 
 
     #some checks
-    if not np.array_equal(data1.shape,data2.shape): print ('ERROR: image dimension mismatch'); sys.exit(2)
-    if not np.array_equal(SpatResol1,SpatResol2): print ('ERROR: image resolution mismatch'); sys.exit(2)
+    if not np.array_equal(data1.shape,data2.shape): lprint ('ERROR: image dimension mismatch'); sys.exit(2)
+    if not np.array_equal(SpatResol1,SpatResol2): lprint ('ERROR: image resolution mismatch'); sys.exit(2)
     directions = np.argsort(data1.shape)
     directions = directions[::-1] # decreasing order
-    if directions[0]!=1: print ('ERROR: largest dimension is not index 1, not implemented'); sys.exit(2)
+    if directions[0]!=1: lprint ('ERROR: largest dimension is not index 1, not implemented'); sys.exit(2)
 
     #initialize match search
     overlap=int(0.05*data1.shape[1]) #5%
     overlap=int(overlap/2)*2 # make it even
-    print ('Overlap is ',overlap)
+    lprint ('Overlap is %d' % overlap)
     stitch_search_range = int(0.25*data1.shape[1]) #25%
-    print ('Shift search range is 0..'+str(2*stitch_search_range))
+    lprint ('Shift search range is 0..'+str(2*stitch_search_range))
     roll1_search_range  = int(0.05*data1.shape[0]) #5%
-    print ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
+    lprint ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
     roll2_search_range  = int(0.05*data1.shape[0]) #5%
-    print ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
+    lprint ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
+    
     #find match
-
-    cores=mp.cpu_count()
-    print ('optimizing using',cores,'cores ',end='')
+    cores=mp.cpu_count()-1
+    lprint ('optimizing using %d cores ' % cores)
     p = Pool(cores)
     return_vals=[]
     for i in range(0,cores):
@@ -227,18 +235,13 @@ if __name__ == '__main__':
     for i in range(0,cores):   
         goodness = np.concatenate ((goodness, return_vals[i].get()), axis=0)
     print ('')
-    max_=0; max_i=0; max_j=0; max_k=0
-    for i in range (0,2*stitch_search_range):
-       for j in range (0,2*roll1_search_range+1):
-           for k in range (0,2*roll2_search_range+1):
-               if goodness [i,j,k]>max_: 
-                  max_ = goodness [i,j,k]
-                  max_i=i
-                  max_j=j-roll1_search_range 
-                  max_k=k-roll2_search_range
-    print ('Optimal shift found at',max_i)
-    print ('Optimal roll1 found at',max_j)
-    print ('Optimal roll2 found at',max_k)
+    max_idx = np.unravel_index(goodness.argmax(), goodness.shape)
+    max_i = max_idx[0] 
+    max_j = max_idx[1]-roll1_search_range 
+    max_k = max_idx[2]-roll2_search_range    
+    lprint ('Optimal shift found at %d' % max_i)
+    lprint ('Optimal roll1 found at %d' % max_j)
+    lprint ('Optimal roll2 found at %d' % max_k)
                   
     #initialize join
     crop1 = int(max_i/2)
@@ -266,7 +269,7 @@ if __name__ == '__main__':
     data *= 32767./max_data
     data = data.astype(np.int16)
     #save NIFTI
-    print ('Writing output files')
+    lprint ('Writing output file')
     aff = np.eye(4)
     aff[0,0] = SpatResol1[0]*1000; aff[0,3] = -(data.shape[0]/2)*aff[0,0]
     aff[1,1] = SpatResol1[1]*1000; aff[1,3] = -(data.shape[1]/2)*aff[1,1]
@@ -279,10 +282,10 @@ if __name__ == '__main__':
     try:
         nib.save(NIFTIimg, os.path.join(dirname,filename_connected))
     except:
-        print ('\nERROR:  problem while writing results'); sys.exit(1)
-    print ('If the result looks wrong, try choosing the input files in inverse order')   
-    print ('\nSuccessfully written output file')   
-            
+        lprint ('\nERROR:  problem while writing results'); sys.exit(1)
+    lprint ('If the result looks wrong, try choosing the input files in inverse order')   
+    lprint ('\nSuccessfully written output file')   
+    logfile.close()        
 
 
     if sys.platform=="win32": os.system("pause") # windows
