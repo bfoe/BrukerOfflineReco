@@ -44,7 +44,6 @@ import os
 import numpy as np
 import nibabel as nib
 import multiprocessing as mp
-from multiprocessing import Pool
 
 
 
@@ -68,6 +67,16 @@ def lprint (text):
     print (text);
     logfile.write(text+'\n')
     logfile.flush()
+    
+def usage ():       
+    print ('')
+    print ('Usage: '+Program_name+' [arguments]')
+    print ('')
+    print ('   arguments are optional')
+    print ('   if specified must be 3 interger numbers I J K')
+    print ('   where I=shift, J=roll1, K=roll2')
+    print ('   example: '+Program_name+' 124 -2 5')   
+    print ('') 
     
 def smooth(x,window_len):
     w=np.hanning(window_len)
@@ -162,7 +171,7 @@ if __name__ == '__main__':
     try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
     except: pass
     TKwindows.update()
-        
+    
     #intercatively choose input NIFTI files
     InputFile1 = askopenfilename(title="Choose 1st NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
     if InputFile1=="":print ('ERROR: No input file specified'); sys.exit(2)
@@ -191,7 +200,26 @@ if __name__ == '__main__':
     data2 = img2.get_data().astype(np.float32)
     SpatResol2 = np.asarray(img2.header.get_zooms())
 
-
+    # get commandline parameters (if present)
+    if    len(sys.argv) == 1: 
+       optimize = True
+    elif  len(sys.argv) == 4: 
+       optimize = False
+       try:
+          max_i = int(sys.argv[1]) 
+          max_j = int(sys.argv[2])
+          max_k = int(sys.argv[3])       
+       except:
+          print ('ERROR evaluating command line arguments')
+          usage(); sys.exit(2)  
+       if max_i>data1.shape[1]*0.5: print ('ERROR: shift too large'); sys.exit(2)
+       if max_i<0: print ('ERROR: shift too small'); sys.exit(2)
+       if abs(max_j)>data1.shape[0]*0.2: print ('ERROR: roll1 out of range'); sys.exit(2)
+       if abs(max_k)>data1.shape[2]*0.2: print ('ERROR: roll2 out of range'); sys.exit(2)            
+    else:
+       print ('ERROR: found',len(sys.argv)-1,' arguments, must be 3 or none')
+       usage(); sys.exit(2)
+      
     # histogram correction
     min1, max1, high1 = anlyze_histogram(data1)
     min2, max2, high2 = anlyze_histogram(data2)
@@ -207,41 +235,42 @@ if __name__ == '__main__':
     directions = directions[::-1] # decreasing order
     if directions[0]!=1: lprint ('ERROR: largest dimension is not index 1, not implemented'); sys.exit(2)
 
-    #initialize match search
     overlap=int(0.05*data1.shape[1]) #5%
     overlap=int(overlap/2)*2 # make it even
-    lprint ('Overlap is %d' % overlap)
-    stitch_search_range = int(0.25*data1.shape[1]) #25%
-    lprint ('Shift search range is 0..'+str(2*stitch_search_range))
-    roll1_search_range  = int(0.05*data1.shape[0]) #5%
-    lprint ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
-    roll2_search_range  = int(0.05*data1.shape[0]) #5%
-    lprint ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
-    
-    #find match
-    cores=mp.cpu_count()-1
-    lprint ('optimizing using %d cores ' % cores)
-    p = Pool(cores)
-    return_vals=[]
-    for i in range(0,cores):
-        workpiece=int(math.ceil(float(stitch_search_range)/float(cores)))
-        stitch_start = i*workpiece
-        stitch_end   = stitch_start+workpiece
-        if stitch_end > stitch_search_range: stitch_end = stitch_search_range       
-        return_vals.append(p.apply_async(worker, args = (data1,data2,stitch_start,stitch_end,overlap,roll1_search_range,roll2_search_range)))
-    p.close()
-    p.join() 
-    goodness = np.zeros ((0, 2*roll1_search_range+1, 2*roll2_search_range+1),dtype=np.float64)
-    for i in range(0,cores):   
-        goodness = np.concatenate ((goodness, return_vals[i].get()), axis=0)
-    print ('')
-    max_idx = np.unravel_index(goodness.argmax(), goodness.shape)
-    max_i = max_idx[0] 
-    max_j = max_idx[1]-roll1_search_range 
-    max_k = max_idx[2]-roll2_search_range    
-    lprint ('Optimal shift found at %d' % max_i)
-    lprint ('Optimal roll1 found at %d' % max_j)
-    lprint ('Optimal roll2 found at %d' % max_k)
+    lprint ('Overlap is %d' % overlap)    
+    if optimize:
+        #initialize match search
+        stitch_search_range = int(0.25*data1.shape[1]) #25%
+        lprint ('Shift search range is 0..'+str(2*stitch_search_range))
+        roll1_search_range  = int(0.05*data1.shape[0]) #5%
+        lprint ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
+        roll2_search_range  = int(0.05*data1.shape[2]) #5%
+        lprint ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
+        
+        #find match
+        cores=mp.cpu_count()-1; cores = max (1,cores)
+        lprint ('optimizing using %d cores ' % cores)
+        p = mp.Pool(cores)
+        return_vals=[]
+        for i in range(0,cores):
+            workpiece=int(math.ceil(float(stitch_search_range)/float(cores)))
+            stitch_start = i*workpiece
+            stitch_end   = stitch_start+workpiece
+            if stitch_end > stitch_search_range: stitch_end = stitch_search_range       
+            return_vals.append(p.apply_async(worker, args = (data1,data2,stitch_start,stitch_end,overlap,roll1_search_range,roll2_search_range)))
+        p.close()
+        p.join() 
+        goodness = np.zeros ((0, 2*roll1_search_range+1, 2*roll2_search_range+1),dtype=np.float64)
+        for i in range(0,cores):   
+            goodness = np.concatenate ((goodness, return_vals[i].get()), axis=0)
+        print ('')
+        max_idx = np.unravel_index(goodness.argmax(), goodness.shape)
+        max_i = max_idx[0] 
+        max_j = max_idx[1]-roll1_search_range 
+        max_k = max_idx[2]-roll2_search_range    
+    lprint ('Shift is %d' % max_i)
+    lprint ('Roll1 is %d' % max_j)
+    lprint ('Roll2 is %d' % max_k)
                   
     #initialize join
     crop1 = int(max_i/2)
