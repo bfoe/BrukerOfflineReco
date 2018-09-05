@@ -46,7 +46,6 @@ import nibabel as nib
 import multiprocessing as mp
 
 
-
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
 except: 
@@ -124,28 +123,27 @@ def anlyze_histogram (d):
        i -= 1     
     return minimum, maximum, threshold
 
+    
 def worker(data1,data2,stitch_start,stitch_end,overlap,roll1_search_range,roll2_search_range):
-    goodness = np.zeros ((2*(stitch_end-stitch_start), 2*roll1_search_range+1, 2*roll2_search_range+1),dtype=np.float64)
+    goodness = np.zeros ((2*(stitch_end-stitch_start), 2*roll1_search_range+1, 2*roll2_search_range+1),dtype=np.float32)
     for i in range (stitch_start,stitch_end):
        print ('.',end='')
        for j in range (0,2*roll1_search_range+1):
+           start_j = 2*roll1_search_range-j
+           end_j   = data1.shape[0]-j
+           test1 = data1[roll1_search_range:data1.shape[0]-roll1_search_range,
+                         data1.shape[1]-i-overlap:data1.shape[1]-i,
+                         roll2_search_range:data1.shape[2]-roll2_search_range].flatten()
            for k in range (0,2*roll2_search_range+1):
-               #0
-               test1 = data1[:,data1.shape[1]-i-overlap:data1.shape[1]-i,:]          
-               test2 = data2[:,i:i+overlap,:]
-               test2 = np.roll(test2,j-roll1_search_range,axis=0)
-               test2 = np.roll(test2,k-roll2_search_range,axis=2)
-               test1=test1.flatten().astype(np.float64); test2=test2.flatten().astype(np.float64)
+               start_k = 2*roll2_search_range-k
+               end_k   = data2.shape[0]-k                           
+               #0                             
+               test2 = data2[start_j:end_j,i:i+overlap,start_k:end_k].flatten()  
                goodness [2*(i-stitch_start),j,k] = np.correlate(test1,test2)
-               #1
-               test1 = data1[:,data1.shape[1]-i-overlap:data1.shape[1]-i,:]          
-               test2 = data2[:,i+1:i+overlap+1,:] # add 1
-               test2 = np.roll(test2,j-roll1_search_range,axis=0)
-               test2 = np.roll(test2,k-roll2_search_range,axis=2)          
-               test1=test1.flatten().astype(np.float64); test2=test2.flatten().astype(np.float64)
-               goodness [2*(i-stitch_start)+1,k] = np.correlate(test1,test2)           
-    return goodness
-
+               #1            
+               test2 = data2[start_j:end_j,i+1:i+overlap+1,start_k:end_k].flatten()                
+               goodness [2*(i-stitch_start)+1,k] = np.correlate(test1,test2)
+    return goodness        
     
 if __name__ == '__main__':
     mp.freeze_support()    
@@ -239,24 +237,43 @@ if __name__ == '__main__':
     overlap=int(overlap/2)*2 # make it even
     lprint ('Overlap is %d' % overlap)    
     if optimize:
-        #initialize match search
+        #fast search along overlap direction only
         stitch_search_range = int(0.25*data1.shape[1]) #25%
-        lprint ('Shift search range is 0..'+str(2*stitch_search_range))
+        lprint ('Rough shift search range is 0..%d' % (2*stitch_search_range))
+        goodness1 = np.zeros ((2*stitch_search_range),dtype=np.float64)
+        for i in range (0,stitch_search_range):
+           if i%10==0: print (',',end='')
+           test1 = data1[:,data1.shape[1]-i-overlap:data1.shape[1]-i,:].flatten()
+           #0           
+           test2 = data2[:,i:i+overlap,:].flatten()
+           goodness1 [2*i]   = np.correlate(test1,test2)
+           #1         
+           test2 = data2[:,i+1:i+overlap+1,:].flatten() # add 1
+           goodness1 [2*i+1] = np.correlate(test1,test2)
+        print ('')
+        max1_idx = goodness1.argmax()           
+        lprint ('Rough shift estimate found at %d' % max1_idx)
+        #initialize real search
+        stitch_search_range = int(0.01*data1.shape[1]) #1%
+        if stitch_search_range<1: stitch_search_range=1 # guaranty at least 1
+        stitch_search_start = int(max1_idx/2) - stitch_search_range
+        stitch_search_end   = int(max1_idx/2) + stitch_search_range
+        lprint ('Refined shift search range is %d..%d' % (2*stitch_search_start,2*stitch_search_end))
         roll1_search_range  = int(0.05*data1.shape[0]) #5%
         lprint ('Roll1 search range is -'+str(roll1_search_range)+'..'+str(roll1_search_range))
         roll2_search_range  = int(0.05*data1.shape[2]) #5%
         lprint ('Roll2 search range is -'+str(roll2_search_range)+'..'+str(roll2_search_range))
-        
         #find match
         cores=mp.cpu_count()-1; cores = max (1,cores)
+        cores=min(cores,stitch_search_end-stitch_search_start) # don't allocate unnecessary cores
         lprint ('optimizing using %d cores ' % cores)
         p = mp.Pool(cores)
         return_vals=[]
+        workpiece=int(math.ceil(float(stitch_search_end-stitch_search_start)/float(cores)))        
         for i in range(0,cores):
-            workpiece=int(math.ceil(float(stitch_search_range)/float(cores)))
-            stitch_start = i*workpiece
+            stitch_start = stitch_search_start + i*workpiece
             stitch_end   = stitch_start+workpiece
-            if stitch_end > stitch_search_range: stitch_end = stitch_search_range       
+            if stitch_end > stitch_search_end: stitch_end = stitch_search_end
             return_vals.append(p.apply_async(worker, args = (data1,data2,stitch_start,stitch_end,overlap,roll1_search_range,roll2_search_range)))
         p.close()
         p.join() 
@@ -265,7 +282,7 @@ if __name__ == '__main__':
             goodness = np.concatenate ((goodness, return_vals[i].get()), axis=0)
         print ('')
         max_idx = np.unravel_index(goodness.argmax(), goodness.shape)
-        max_i = max_idx[0] 
+        max_i = max_idx[0]+2*stitch_search_start
         max_j = max_idx[1]-roll1_search_range 
         max_k = max_idx[2]-roll2_search_range    
     lprint ('Shift is %d' % max_i)
