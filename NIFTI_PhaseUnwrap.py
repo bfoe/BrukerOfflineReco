@@ -190,7 +190,7 @@ for i in range (0,nfiles):
     logfile.write(FIDfile[i]+'\n')
 logfile.write('\n\n\n')
 logfile.write('Venc`s = '+np.array_str(venc_arr[:])+'\n')
-logfile.write('Before\tAfter\tAverage\n')
+logfile.write('Position\tBefore\tAfter\tAverage\n')
     
 #PhaseUnwrap
 dim = IMGdata_decoded_PH.shape;
@@ -233,8 +233,10 @@ for k in range (0, dim_reduced):
           temp = np.zeros (shape=(nfiles),dtype=np.float32)
           temp [nz] = PhUnwrap_try[min_chi_index,:]
           comment = ''
+          logfile.write(str(np.unravel_index(all_nonzero[k],dim[0:3]))+'\t')
           logfile.write(np.array_str(IMGdata_decoded_PH_NZ[k,:])+'\t'+np.array_str(temp)+'\t')
           logfile.write(str("%7.2f" % Img_PH_flow_NZ[k])+'\n')
+          logfile.flush()
 Img_PH_flow[all_nonzero] = Img_PH_flow_NZ[:] # undo vector reduction   
 Img_PH_flow = Img_PH_flow.reshape (dim[0],dim[1],dim[2]) # undo flatten           
 print (' ')
