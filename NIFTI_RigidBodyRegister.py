@@ -39,15 +39,10 @@ except: pass #silent
 from math import floor
 import sys
 import os
-import copy
 import numpy as np
 import nibabel as nib
 import new # required for ITK work with pyinstaller
 import itk
-if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
-   from scipy_extract import label   
-else: # running native python
-   from scipy.ndimage import label 
 
 
 TK_installed=True
@@ -143,10 +138,10 @@ TKwindows.update()
 #intercatively choose input NIFTI files
 nfiles=0
 answer="dummy"
-FIDfile1 = askopenfilename(title="Choose moving NIFTI file (A)", filetypes=[("NIFTI files",('*.png','*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+FIDfile1 = askopenfilename(title="Choose moving NIFTI file (A)", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
 if FIDfile1 == "": print ('ERROR: X input file not specified'); sys.exit(2)
 FIDfile1 = os.path.abspath(FIDfile1) 
-FIDfile2 = askopenfilename(title="Choose reference NIFTI file (B)", filetypes=[("NIFTI files",('*.png','*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+FIDfile2 = askopenfilename(title="Choose reference NIFTI file (B) or parameterfile", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ','.parameters'))])
 if FIDfile2 == "": print ('ERROR: Y input file not specified'); sys.exit(2)
 FIDfile2 = os.path.abspath(FIDfile2) 
 TKwindows.update()
@@ -157,10 +152,11 @@ FIDfile2=str(FIDfile2)
 
 # Set Output filenames
 dirname  = os.path.dirname(FIDfile1)
-Outfile = os.path.basename(FIDfile1);
-Outfile = Outfile[0:Outfile.rfind('.nii.gz')]+'_RigidBodyRegistered.nii.gz'
-logname = os.path.basename(FIDfile1);
-logname = logname[0:logname.rfind('.nii.gz')]+'_RigidBodyRegistration.log'
+basename = os.path.basename(FIDfile1)
+basename = basename[0:basename.rfind('.nii.gz')]+'_RigidBodyRegistered'
+outfile = basename+'.nii.gz'
+parameterfile = basename+'.parameters'
+logname = basename+'.log'
 try: logfile = open(os.path.join(dirname,logname), "w")
 except: print ('ERROR opening logfile'); sys.exit(2)
 logfile.write ('3D Rigid Body registration\nof\n')
@@ -176,7 +172,17 @@ data_fixed = img_fixed.get_data().astype(np.float32)
 SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
 
 # check for largest dimension
-# todo
+directions_fixed = np.argsort(data_fixed.shape)
+directions_fixed = directions_fixed[::-1] # decreasing order
+if directions_fixed[0]!=0: lprint ('ERROR: largest dimension is not index 0, not implemented'); sys.exit(2)
+directions_moving = np.argsort(data_moving.shape)
+directions_moving = directions_moving[::-1] # decreasing order
+if directions_moving[0]==1: transpose_initial = [1,2,0]
+elif directions_moving[0]==2: transpose_initial = [2,0,1]
+else: transpose_initial = [0,1,2]
+transpose_initial =  np.asarray(transpose_initial)
+lprint ('Applying initial transpose: '+np.array2string(transpose_initial+1))
+data_moving = np.transpose (data_moving, axes=transpose_initial).copy()
 
 # do all possible permutations
 permutations = permutations()
@@ -321,10 +327,25 @@ data = itk.GetArrayViewFromImage(img)
 data = np.transpose (data, axes=(2,1,0))
 Resolution_out = img.GetSpacing()
 
-# save transform and permutation parameters
-# todo
 
 #---------------- ITK ends --------------------
+
+
+# save transform and permutation parameters
+try: pfile = open(os.path.join(dirname,parameterfile), "w")
+except: lprint ('ERROR opening parameterfile'); sys.exit(2)
+pfile.write ('Model=VersorRigid3DTransform\n')
+pfile.write ('Transpose_initial='+str(transpose_initial[0]+1))
+pfile.write (str(transpose_initial[1]+1)+str(transpose_initial[2]+1)+'\n')
+pfile.write ('Permutation='+str(permutations[best_index,0]))
+pfile.write (str(permutations[best_index,1])+str(permutations[best_index,2])+'\n')
+pfile.write ('Transform1='+str(best_transform.GetParameters().GetElement(0))+'\n')
+pfile.write ('Transform2='+str(best_transform.GetParameters().GetElement(1))+'\n')
+pfile.write ('Transform3='+str(best_transform.GetParameters().GetElement(2))+'\n')
+pfile.write ('Transform4='+str(best_transform.GetParameters().GetElement(3))+'\n')
+pfile.write ('Transform5='+str(best_transform.GetParameters().GetElement(4))+'\n')
+pfile.write ('Transform6='+str(best_transform.GetParameters().GetElement(5))+'\n')
+pfile.close ()
 
 #write NIFTI
 lprint ('Writing registration result ')
@@ -341,7 +362,7 @@ NIFTIimg.header.set_slope_inter(max_data/32767.,0)
 NIFTIimg.header.set_xyzt_units(3, 8)
 NIFTIimg.set_sform(aff, code=0)
 NIFTIimg.set_qform(aff, code=1)
-try: nib.save(NIFTIimg, os.path.join(dirname,Outfile))
+try: nib.save(NIFTIimg, os.path.join(dirname,outfile))
 except: lprint ('\nERROR:  problem while writing results'); sys.exit(1)
 lprint ("\ndone\n")
 logfile.close()
