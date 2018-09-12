@@ -39,6 +39,7 @@ except: pass #silent
 from math import floor
 import sys
 import os
+import copy
 import numpy as np
 import nibabel as nib
 import new # required for ITK work with pyinstaller
@@ -102,9 +103,20 @@ def itk_SetDirectionArray (itkImage,arr):
 def itk_SetiDirectionArray (itkImage,arr):
     for i in range(3):
         for j in range(3):
-            itkImage.GetInverseDirection().GetVnlMatrix().set(i,j,arr[i,j])            
+            itkImage.GetInverseDirection().GetVnlMatrix().set(i,j,arr[i,j])                       
+            
+def permutations():
+    dirs  = np.asarray ([[1,2,3],[1,3,2]])
+    #use below if the largest directions in NOT guaranteed to be in the second dimension
+    #dirs  = np.asarray ([1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1])
+    signs = np.asarray ([[1,1,1],[1,1,-1],[1,-1,1],[-1,1,1],[-1,-1,1],[-1,1,-1],[1,-1,-1],[-1,-1,-1]])
+    result = np.zeros ((dirs.shape[0]*signs.shape[0],3), dtype=int)
+    for i in range(dirs.shape[0]):
+        for j in range(signs.shape[0]):
+              result [i*signs.shape[0]+j,:]=dirs[i,:]*signs[j,:]
+    return result
 
-    
+
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -143,7 +155,6 @@ except: pass #silent
 FIDfile1=str(FIDfile1)
 FIDfile2=str(FIDfile2)
 
-
 # Set Output filenames
 dirname  = os.path.dirname(FIDfile1)
 Outfile = os.path.basename(FIDfile1);
@@ -155,6 +166,7 @@ except: print ('ERROR opening logfile'); sys.exit(2)
 logfile.write ('3D Rigid Body registration\nof\n')
 logfile.write(FIDfile1+'\nto\n'+FIDfile2+'\n\n');logfile.flush()
 
+# Read NIFTI files
 lprint ('Reading NIFTI files')
 img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
@@ -162,145 +174,134 @@ SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 img_fixed = nib.load(FIDfile2)
 data_fixed = img_fixed.get_data().astype(np.float32)
 SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
+
+# check for largest dimension
+# todo
+
+# do all possible permutations
+permutations = permutations()
+transform_list = []
+optimizer_values = np.zeros(permutations.shape[0], dtype=np.float32)
+for i in range(permutations.shape[0]):
+    data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[i])-1).copy() # copy required for GetImageFromArray
+    data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
+    data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
+    SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
+    if permutations[i,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
+    if permutations[i,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
+    if permutations[i,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
+    SpatResol_moving_per = SpatResol_moving[np.abs(permutations[i])-1]
+
     
 # ------------------       ITK code starts here --------------------
 
-# convert Numpy Array to ITK 
-movingImage = itk.GetImageFromArray(data_moving[:,:,:])
+    # convert Numpy Array to ITK 
+    movingImage = itk.GetImageFromArray(data_moving_per) 
+    itk_SetDirectionArray  (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+    itk_SetiDirectionArray (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+    movingImage.SetSpacing(SpatResol_moving_per.tolist())
+    Origin_moving = SpatResol_moving_per*data_moving_per_shape/2
+    Origin_moving [2] *= -1
+    movingImage.SetOrigin(Origin_moving.tolist())
+    fixedImage  = itk.GetImageFromArray(data_fixed)   
+    itk_SetDirectionArray  (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+    itk_SetiDirectionArray (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+    fixedImage.SetSpacing(SpatResol_moving_per.tolist())
+    Origin_fixed = SpatResol_fixed*data_fixed.shape/2
+    Origin_fixed [2] *= -1
+    fixedImage.SetOrigin(Origin_fixed.tolist())
+
+    #  Define data types
+    FixedImageType   = itk.Image[itk.F, 3]
+    MovingImageType  = itk.Image[itk.F, 3]
+    TransformType    = itk.VersorRigid3DTransform[itk.D]
+    OptimizerType    = itk.RegularStepGradientDescentOptimizerv4[itk.D]
+    RegistrationType = itk.ImageRegistrationMethodv4[FixedImageType,MovingImageType]
+    MetricType       = itk.MattesMutualInformationImageToImageMetricv4[FixedImageType,MovingImageType]
+
+    #  Instantiate the classes for the registration framework
+    registration = RegistrationType.New()
+    imageMetric  = MetricType.New()
+    transform    = TransformType.New()
+    optimizer    = OptimizerType.New()
+    registration.SetMetric(imageMetric)
+    registration.SetInitialTransform(transform)
+    registration.SetOptimizer(optimizer)
+    registration.SetFixedImage(fixedImage)
+    registration.SetMovingImage(movingImage)
+
+    #  Define optimizer parameters
+    optimizer.SetLearningRate(1) # 1
+    optimizer.SetMinimumStepLength(0.001) #0.001
+    optimizer.SetRelaxationFactor(0.5)
+    optimizer.SetNumberOfIterations(500)
+
+    # One level registration process without shrinking and smoothing.
+    registration.SetNumberOfLevels(1)
+    registration.SetSmoothingSigmasPerLevel([0])
+    registration.SetShrinkFactorsPerLevel([1])
+
+    # Iteration Observer
+    def iterationUpdate():
+        print('.', end='') # just print a progress indicator
+        #currentParameter = registration.GetOutput().Get().GetParameters()
+        #lprint ("%f :   %f %f %f %f %f %f" % (optimizer.GetValue(),
+        #       currentParameter.GetElement(0), currentParameter.GetElement(1),
+        #       currentParameter.GetElement(2), currentParameter.GetElement(3),
+        #       currentParameter.GetElement(4), currentParameter.GetElement(5)))
+
+    iterationCommand = itk.PyCommand.New()
+    iterationCommand.SetCommandCallable(iterationUpdate)
+    optimizer.AddObserver(itk.IterationEvent(),iterationCommand)
+
+    #  Start the registration process
+    lprint ("Starting registration with permutation "+str(i)+': '+np.array2string(permutations[i]))
+    registration.Update()
+
+
+    # Get parameters of the transformation
+    #
+    # The optimizable parameters is an array of 6 elements. 
+    # The first 3 elements are the components of the versor representation of 3D rotation. 
+    # The last 3 parameters defines the translation in each dimension
+    #
+    # from: https://itk.org/Doxygen/html/classitk_1_1VersorRigid3DTransform.html
+    #
+    finalParameters = registration.GetOutput().Get().GetParameters()
+    lprint ("\n%f :   %f %f %f %f %f %f\n" % (optimizer.GetValue(),
+            finalParameters.GetElement(0), finalParameters.GetElement(1),
+            finalParameters.GetElement(2), finalParameters.GetElement(3),
+            finalParameters.GetElement(4), finalParameters.GetElement(5)))
+            
+    # save results for later use
+    optimizer_values[i] = optimizer.GetValue()
+    transform_list.append(registration.GetTransform());
+
+# find best
+best_index = np.argmin(optimizer_values)
+best_optimizer = optimizer_values [best_index]
+best_transform = transform_list[best_index]
+lprint ('Best registration result obtained with permutation: %d' % best_index)
+# redo movingImage permutation
+data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[best_index])-1).copy()
+data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
+data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
+SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
+if permutations[best_index,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
+if permutations[best_index,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
+if permutations[best_index,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
+SpatResol_moving_per = SpatResol_moving[np.abs(permutations[best_index])-1]
+movingImage = itk.GetImageFromArray(data_moving_per) 
 itk_SetDirectionArray  (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
 itk_SetiDirectionArray (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-movingImage.SetSpacing(SpatResol_moving.tolist())
-Origin_moving = SpatResol_moving*data_moving.shape/2
-Origin_moving [2] *= -1 # duno why this is needed
+movingImage.SetSpacing(SpatResol_moving_per.tolist())
+Origin_moving = SpatResol_moving_per*data_moving_per_shape/2
+Origin_moving [2] *= -1
 movingImage.SetOrigin(Origin_moving.tolist())
-fixedImage  = itk.GetImageFromArray(data_fixed[:,:,:])   
-itk_SetDirectionArray  (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-itk_SetiDirectionArray (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-fixedImage.SetSpacing(SpatResol_moving.tolist())
-Origin_fixed = SpatResol_fixed*data_fixed.shape/2
-Origin_fixed [2] *= -1 # duno why this is needed
-fixedImage.SetOrigin(Origin_fixed.tolist())
-#lprint (movingImage.GetLargestPossibleRegion().GetSize())
-#lprint (movingImage.GetSpacing())
-#lprint (movingImage.GetOrigin())
-#lprint (itk_GetDirectionArray(movingImage))
-#lprint (itk_GetiDirectionArray(movingImage))
-#lprint (fixedImage)
-#lprint ('')
-#lprint (fixedImage.GetLargestPossibleRegion().GetSize())
-#lprint (fixedImage.GetSpacing())
-#lprint (fixedImage.GetOrigin())
-#lprint (itk_GetDirectionArray(fixedImage))
-#lprint (itk_GetiDirectionArray(fixedImage))
-#lprint (fixedImage)
-#lprint ('')
-
-#
-#  Define data types
-#
-FixedImageType   = itk.Image[itk.F, 3]
-MovingImageType  = itk.Image[itk.F, 3]
-#TransformType    = itk.AffineTransform[itk.D, 3]
-TransformType    = itk.VersorRigid3DTransform[itk.D]
-OptimizerType    = itk.RegularStepGradientDescentOptimizerv4[itk.D]
-RegistrationType = itk.ImageRegistrationMethodv4[FixedImageType,MovingImageType]
-#MetricType       = itk.MeanSquaresImageToImageMetricv4[FixedImageType,MovingImageType]
-#MetricType       = itk.CorrelationImageToImageMetricv4[FixedImageType,MovingImageType]
-MetricType       = itk.MattesMutualInformationImageToImageMetricv4[FixedImageType,MovingImageType]
-
-'''
-#  Read the fixed and moving images
-lprint ('Reading NIFTI files')
-movingImageReader = itk.ImageFileReader[MovingImageType].New()
-fixedImageReader  = itk.ImageFileReader[FixedImageType].New()
-movingImageReader.SetFileName(FIDfile1)
-fixedImageReader.SetFileName(FIDfile2)
-movingImageReader.Update()
-fixedImageReader.Update()
-movingImage = movingImageReader.GetOutput()
-fixedImage  = fixedImageReader.GetOutput()
-if np.min(fixedImage.GetSpacing())<10.:
-   fixedImage.SetSpacing(fixedImage.GetSpacing()*1000) # undo ITK scale to xyz_units=um
-if np.min(movingImage.GetSpacing())<10.:
-   movingImage.SetSpacing(movingImage.GetSpacing()*1000) # undo ITK scale to xyz_units=um
-#lprint (movingImage.GetLargestPossibleRegion().GetSize())
-#lprint (movingImage.GetSpacing())
-#lprint (movingImage.GetOrigin())
-#lprint (itk_GetDirectionArray(movingImage))
-#lprint (itk_GetiDirectionArray(movingImage))
-#lprint (fixedImage)
-#lprint ('')
-#lprint (fixedImage.GetLargestPossibleRegion().GetSize())
-#lprint (fixedImage.GetSpacing())
-#lprint (fixedImage.GetOrigin())
-#lprint (itk_GetDirectionArray(fixedImage))
-#lprint (itk_GetiDirectionArray(fixedImage))
-#lprint (fixedImage)
-#lprint ('')
-'''
-
-#  Instantiate the classes for the registration framework
-registration = RegistrationType.New()
-imageMetric  = MetricType.New()
-transform    = TransformType.New()
-optimizer    = OptimizerType.New()
-registration.SetMetric(imageMetric)
-registration.SetInitialTransform(transform)
-registration.SetOptimizer(optimizer)
-registration.SetFixedImage(fixedImage)
-registration.SetMovingImage(movingImage)
-
-#  Define optimizer parameters
-optimizer.SetLearningRate(1) # 1
-optimizer.SetMinimumStepLength(0.001) #0.001
-optimizer.SetRelaxationFactor(0.5)
-optimizer.SetNumberOfIterations(500)
-
-# One level registration process without shrinking and smoothing.
-registration.SetNumberOfLevels(1)
-registration.SetSmoothingSigmasPerLevel([0])
-registration.SetShrinkFactorsPerLevel([1])
-
-# Iteration Observer
-def iterationUpdate():
-    #print('.', end='') # just print a progress indicator
-    currentParameter = registration.GetOutput().Get().GetParameters()
-    lprint ("%f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f" % ( optimizer.GetValue(),
-                                  currentParameter.GetElement(0),
-                                  currentParameter.GetElement(1), 
-                                  currentParameter.GetElement(2),
-                                  currentParameter.GetElement(3),
-                                  currentParameter.GetElement(4),
-                                  currentParameter.GetElement(5),
-                                  currentParameter.GetElement(6),    
-                                  currentParameter.GetElement(7)))
-
-iterationCommand = itk.PyCommand.New()
-iterationCommand.SetCommandCallable(iterationUpdate)
-optimizer.AddObserver(itk.IterationEvent(),iterationCommand)
-
-#  Start the registration process
-lprint ("Starting registration")
-registration.Update()
-
-
-# Get the final parameters of the transformation
-finalParameters = registration.GetOutput().Get().GetParameters()
-lprint (" ")
-lprint ("Final Registration Parameters ")
-lprint ("%f %f %f %f %f %f %f %f %f" % (optimizer.GetValue(),
-                                  finalParameters.GetElement(0),
-                                  finalParameters.GetElement(1), 
-                                  finalParameters.GetElement(2),
-                                  finalParameters.GetElement(3),
-                                  finalParameters.GetElement(4),
-                                  finalParameters.GetElement(5),
-                                  finalParameters.GetElement(6),
-                                  finalParameters.GetElement(7)))
-
+   
 # Now, we use the final transform for resampling the moving image.
 resampler = itk.ResampleImageFilter[MovingImageType,FixedImageType].New()
-resampler.SetTransform(registration.GetTransform())
+resampler.SetTransform(best_transform)
 resampler.SetInput(movingImage)
 region = fixedImage.GetLargestPossibleRegion()
 resampler.SetSize(region.GetSize())
@@ -320,8 +321,10 @@ data = itk.GetArrayViewFromImage(img)
 data = np.transpose (data, axes=(2,1,0))
 Resolution_out = img.GetSpacing()
 
-#---------------- ITK ends --------------------
+# save transform and permutation parameters
+# todo
 
+#---------------- ITK ends --------------------
 
 #write NIFTI
 lprint ('Writing registration result ')
@@ -356,3 +359,4 @@ else:
     try: result = sys.stdin.read(1)
     except IOError: pass
     finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
+   
