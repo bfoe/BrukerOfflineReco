@@ -73,7 +73,18 @@ def lprint (text):
     print (text);
     logfile.write(text+'\n')
     logfile.flush()
-
+    
+def ParseSingleValue(val):
+    try: # check if int
+        result = int(val)
+    except ValueError:
+        try: # then check if float
+            result = float(val)
+        except ValueError:
+            # if not, should  be string. Remove  newline character.
+            result = val.rstrip('\n')
+    return result
+    
 def itk_GetDirectionArray(itkImage):
     arr = np.zeros ((3,3),dtype=np.float32)
     vnl_matrix = itkImage.GetDirection().GetVnlMatrix()
@@ -167,14 +178,23 @@ lprint ('Reading NIFTI files')
 img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
-img_fixed = nib.load(FIDfile2)
-data_fixed = img_fixed.get_data().astype(np.float32)
-SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
-
-# check for largest dimension
-directions_fixed = np.argsort(data_fixed.shape)
-directions_fixed = directions_fixed[::-1] # decreasing order
-if directions_fixed[0]!=0: lprint ('ERROR: largest dimension is not index 0, not implemented'); sys.exit(2)
+if  os.path.splitext(FIDfile2)[1] != ".parameters":
+    do_permutations = True
+    img_fixed = nib.load(FIDfile2)
+    data_fixed = img_fixed.get_data().astype(np.float32)
+    SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
+else: # read parameter file
+    do_permutations = False
+    param_dict = {}
+    with open(FIDfile2, "r") as f:
+        lines = f.readlines()
+        for line in lines:   
+            (param_name, current_line) = line.split('=') #split at "="
+            value = ParseSingleValue(current_line)
+            param_dict[param_name] = value
+                       
+                    
+# transpose moving to match largest extension to dimension 0
 directions_moving = np.argsort(data_moving.shape)
 directions_moving = directions_moving[::-1] # decreasing order
 if directions_moving[0]==1: transpose_initial = [1,2,0]
@@ -184,119 +204,156 @@ transpose_initial =  np.asarray(transpose_initial)
 lprint ('Applying initial transpose: '+np.array2string(transpose_initial+1))
 data_moving = np.transpose (data_moving, axes=transpose_initial).copy()
 
-# do all possible permutations
-permutations = permutations()
-transform_list = []
-optimizer_values = np.zeros(permutations.shape[0], dtype=np.float32)
-for i in range(permutations.shape[0]):
-    data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[i])-1).copy() # copy required for GetImageFromArray
-    data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
-    data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
-    SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
-    if permutations[i,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
-    if permutations[i,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
-    if permutations[i,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
-    SpatResol_moving_per = SpatResol_moving[np.abs(permutations[i])-1]
 
-    
-# ------------------       ITK code starts here --------------------
+if do_permutations:
+    # check fixed for largest extension in dimension 0
+    if do_permutations:
+        directions_fixed = np.argsort(data_fixed.shape)
+        directions_fixed = directions_fixed[::-1] # decreasing order
+        if directions_fixed[0]!=0: lprint ('ERROR: largest dimension is not index 0, not implemented'); sys.exit(2)
+    # do all possible permutations
+    permutations = permutations()
+    transform_list = []
+    optimizer_values = np.zeros(permutations.shape[0], dtype=np.float32)
+    for i in range(permutations.shape[0]): 
+        data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[i])-1).copy() # copy required for GetImageFromArray
+        data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
+        data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
+        SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
+        if permutations[i,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
+        if permutations[i,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
+        if permutations[i,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
+        SpatResol_moving_per = SpatResol_moving[np.abs(permutations[i])-1]
 
-    # convert Numpy Array to ITK 
-    movingImage = itk.GetImageFromArray(data_moving_per) 
-    itk_SetDirectionArray  (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-    itk_SetiDirectionArray (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-    movingImage.SetSpacing(SpatResol_moving_per.tolist())
-    Origin_moving = SpatResol_moving_per*data_moving_per_shape/2
-    Origin_moving [2] *= -1
-    movingImage.SetOrigin(Origin_moving.tolist())
-    fixedImage  = itk.GetImageFromArray(data_fixed)   
-    itk_SetDirectionArray  (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-    itk_SetiDirectionArray (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
-    fixedImage.SetSpacing(SpatResol_moving_per.tolist())
-    Origin_fixed = SpatResol_fixed*data_fixed.shape/2
-    Origin_fixed [2] *= -1
-    fixedImage.SetOrigin(Origin_fixed.tolist())
+        
+    # ------------------       ITK code starts here --------------------
 
-    #  Define data types
+        # convert Numpy Array to ITK 
+        movingImage = itk.GetImageFromArray(data_moving_per) 
+        itk_SetDirectionArray  (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+        itk_SetiDirectionArray (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+        movingImage.SetSpacing(SpatResol_moving_per.tolist())
+        Origin_moving = SpatResol_moving_per*data_moving_per_shape/2
+        Origin_moving [2] *= -1
+        movingImage.SetOrigin(Origin_moving.tolist())
+        fixedImage  = itk.GetImageFromArray(data_fixed)   
+        itk_SetDirectionArray  (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+        itk_SetiDirectionArray (fixedImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
+        fixedImage.SetSpacing(SpatResol_moving_per.tolist())
+        Origin_fixed = SpatResol_fixed*data_fixed.shape/2
+        Origin_fixed [2] *= -1
+        fixedImage.SetOrigin(Origin_fixed.tolist())
+
+        #  Define data types
+        FixedImageType   = itk.Image[itk.F, 3]
+        MovingImageType  = itk.Image[itk.F, 3]
+        TransformType    = itk.VersorRigid3DTransform[itk.D]
+        OptimizerType    = itk.RegularStepGradientDescentOptimizerv4[itk.D]
+        RegistrationType = itk.ImageRegistrationMethodv4[FixedImageType,MovingImageType]
+        MetricType       = itk.MattesMutualInformationImageToImageMetricv4[FixedImageType,MovingImageType]
+
+        #  Instantiate the classes for the registration framework
+        registration = RegistrationType.New()
+        imageMetric  = MetricType.New()
+        transform    = TransformType.New()
+        optimizer    = OptimizerType.New()
+        registration.SetMetric(imageMetric)
+        registration.SetInitialTransform(transform)
+        registration.SetOptimizer(optimizer)
+        registration.SetFixedImage(fixedImage)
+        registration.SetMovingImage(movingImage)
+
+        #  Define optimizer parameters
+        optimizer.SetLearningRate(1) # 1
+        optimizer.SetMinimumStepLength(0.001) #0.001
+        optimizer.SetRelaxationFactor(0.5)
+        optimizer.SetNumberOfIterations(500)
+
+        # One level registration process without shrinking and smoothing.
+        registration.SetNumberOfLevels(1)
+        registration.SetSmoothingSigmasPerLevel([0])
+        registration.SetShrinkFactorsPerLevel([1])
+
+        # Iteration Observer
+        def iterationUpdate():
+            print('.', end='') # just print a progress indicator
+            #currentParameter = registration.GetOutput().Get().GetParameters()
+            #lprint ("%f :   %f %f %f %f %f %f" % (optimizer.GetValue(),
+            #       currentParameter.GetElement(0), currentParameter.GetElement(1),
+            #       currentParameter.GetElement(2), currentParameter.GetElement(3),
+            #       currentParameter.GetElement(4), currentParameter.GetElement(5)))
+
+        iterationCommand = itk.PyCommand.New()
+        iterationCommand.SetCommandCallable(iterationUpdate)
+        optimizer.AddObserver(itk.IterationEvent(),iterationCommand)
+
+        #  Start the registration process
+        lprint ("Starting registration with permutation "+str(i)+': '+np.array2string(permutations[i]))
+        registration.Update()
+
+
+        # Get parameters of the transformation
+        #
+        # The optimizable parameters is an array of 6 elements. 
+        # The first 3 elements are the components of the versor representation of 3D rotation. 
+        # The last 3 parameters defines the translation in each dimension
+        #
+        # from: https://itk.org/Doxygen/html/classitk_1_1VersorRigid3DTransform.html
+        #
+        finalParameters = registration.GetOutput().Get().GetParameters()
+        lprint ("\n%f :   %f %f %f %f %f %f\n" % (optimizer.GetValue(),
+                finalParameters.GetElement(0), finalParameters.GetElement(1),
+                finalParameters.GetElement(2), finalParameters.GetElement(3),
+                finalParameters.GetElement(4), finalParameters.GetElement(5)))
+                
+        # save results for later use
+        optimizer_values[i] = optimizer.GetValue()
+        transform_list.append(registration.GetTransform());
+
+    # find best
+    best_index = np.argmin(optimizer_values)
+    best_optimizer = optimizer_values [best_index]
+    best_transform = transform_list[best_index]
+    lprint ('Best registration result obtained with permutation: %d' % best_index)
+    permutation_to_apply = permutations[best_index]
+else: # gete transformation parameters from previousely saved file
+    s = param_dict['Permutation'].split(',')
+    permutation_to_apply = [int(s[0]),int(s[1]),int(s[2])] 
+    p1 = param_dict['Transform1']; p2 = param_dict['Transform2']
+    p3 = param_dict['Transform3']; p4 = param_dict['Transform4']
+    p5 = param_dict['Transform5']; p6 = param_dict['Transform6']
+    #  Define itk data types
     FixedImageType   = itk.Image[itk.F, 3]
     MovingImageType  = itk.Image[itk.F, 3]
     TransformType    = itk.VersorRigid3DTransform[itk.D]
     OptimizerType    = itk.RegularStepGradientDescentOptimizerv4[itk.D]
     RegistrationType = itk.ImageRegistrationMethodv4[FixedImageType,MovingImageType]
     MetricType       = itk.MattesMutualInformationImageToImageMetricv4[FixedImageType,MovingImageType]
-
-    #  Instantiate the classes for the registration framework
-    registration = RegistrationType.New()
-    imageMetric  = MetricType.New()
-    transform    = TransformType.New()
-    optimizer    = OptimizerType.New()
-    registration.SetMetric(imageMetric)
-    registration.SetInitialTransform(transform)
-    registration.SetOptimizer(optimizer)
-    registration.SetFixedImage(fixedImage)
-    registration.SetMovingImage(movingImage)
-
-    #  Define optimizer parameters
-    optimizer.SetLearningRate(1) # 1
-    optimizer.SetMinimumStepLength(0.001) #0.001
-    optimizer.SetRelaxationFactor(0.5)
-    optimizer.SetNumberOfIterations(500)
-
-    # One level registration process without shrinking and smoothing.
-    registration.SetNumberOfLevels(1)
-    registration.SetSmoothingSigmasPerLevel([0])
-    registration.SetShrinkFactorsPerLevel([1])
-
-    # Iteration Observer
-    def iterationUpdate():
-        print('.', end='') # just print a progress indicator
-        #currentParameter = registration.GetOutput().Get().GetParameters()
-        #lprint ("%f :   %f %f %f %f %f %f" % (optimizer.GetValue(),
-        #       currentParameter.GetElement(0), currentParameter.GetElement(1),
-        #       currentParameter.GetElement(2), currentParameter.GetElement(3),
-        #       currentParameter.GetElement(4), currentParameter.GetElement(5)))
-
-    iterationCommand = itk.PyCommand.New()
-    iterationCommand.SetCommandCallable(iterationUpdate)
-    optimizer.AddObserver(itk.IterationEvent(),iterationCommand)
-
-    #  Start the registration process
-    lprint ("Starting registration with permutation "+str(i)+': '+np.array2string(permutations[i]))
-    registration.Update()
+    best_transform = TransformType.New()
+    #set rotation    
+    a = best_transform.GetVersor()     
+    a.Set((p1,p2,p3))
+    best_transform.SetRotation(a)
+    #set translation    
+    best_transform.SetTranslation((p4,p5,p6))
+    #report
+    lprint ('Applying permutation: '+str(permutation_to_apply))        
+    s=itk.GetArrayFromVnlVector(best_transform.GetParameters())
+    lprint ("Applying transform:   %f %f %f %f %f %f\n" % (s[0],s[1],s[2],s[3],s[4],s[5]))
+    #print (best_transform.GetTranslation())
+    #print (itk.GetArrayFromVnlVector(best_transform.GetFixedParameters()))
 
 
-    # Get parameters of the transformation
-    #
-    # The optimizable parameters is an array of 6 elements. 
-    # The first 3 elements are the components of the versor representation of 3D rotation. 
-    # The last 3 parameters defines the translation in each dimension
-    #
-    # from: https://itk.org/Doxygen/html/classitk_1_1VersorRigid3DTransform.html
-    #
-    finalParameters = registration.GetOutput().Get().GetParameters()
-    lprint ("\n%f :   %f %f %f %f %f %f\n" % (optimizer.GetValue(),
-            finalParameters.GetElement(0), finalParameters.GetElement(1),
-            finalParameters.GetElement(2), finalParameters.GetElement(3),
-            finalParameters.GetElement(4), finalParameters.GetElement(5)))
-            
-    # save results for later use
-    optimizer_values[i] = optimizer.GetValue()
-    transform_list.append(registration.GetTransform());
-
-# find best
-best_index = np.argmin(optimizer_values)
-best_optimizer = optimizer_values [best_index]
-best_transform = transform_list[best_index]
-lprint ('Best registration result obtained with permutation: %d' % best_index)
+    
 # redo movingImage permutation
-data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[best_index])-1).copy()
+data_moving_per = np.transpose (data_moving, axes=np.abs(permutation_to_apply)-1).copy()
 data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
 data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
 SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
-if permutations[best_index,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
-if permutations[best_index,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
-if permutations[best_index,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
-SpatResol_moving_per = SpatResol_moving[np.abs(permutations[best_index])-1]
+if permutation_to_apply[0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
+if permutation_to_apply[1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
+if permutation_to_apply[2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
+SpatResol_moving_per = SpatResol_moving[np.abs(permutation_to_apply)-1]
 movingImage = itk.GetImageFromArray(data_moving_per) 
 itk_SetDirectionArray  (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
 itk_SetiDirectionArray (movingImage, np.asarray([[-1,0,0],[0,-1,0],[0,0,1]]))
@@ -304,7 +361,10 @@ movingImage.SetSpacing(SpatResol_moving_per.tolist())
 Origin_moving = SpatResol_moving_per*data_moving_per_shape/2
 Origin_moving [2] *= -1
 movingImage.SetOrigin(Origin_moving.tolist())
-   
+
+# quick hack   
+if not do_permutations: fixedImage = movingImage
+
 # Now, we use the final transform for resampling the moving image.
 resampler = itk.ResampleImageFilter[MovingImageType,FixedImageType].New()
 resampler.SetTransform(best_transform)
@@ -332,20 +392,21 @@ Resolution_out = img.GetSpacing()
 
 
 # save transform and permutation parameters
-try: pfile = open(os.path.join(dirname,parameterfile), "w")
-except: lprint ('ERROR opening parameterfile'); sys.exit(2)
-pfile.write ('Model=VersorRigid3DTransform\n')
-pfile.write ('Transpose_initial='+str(transpose_initial[0]+1))
-pfile.write (str(transpose_initial[1]+1)+str(transpose_initial[2]+1)+'\n')
-pfile.write ('Permutation='+str(permutations[best_index,0]))
-pfile.write (str(permutations[best_index,1])+str(permutations[best_index,2])+'\n')
-pfile.write ('Transform1='+str(best_transform.GetParameters().GetElement(0))+'\n')
-pfile.write ('Transform2='+str(best_transform.GetParameters().GetElement(1))+'\n')
-pfile.write ('Transform3='+str(best_transform.GetParameters().GetElement(2))+'\n')
-pfile.write ('Transform4='+str(best_transform.GetParameters().GetElement(3))+'\n')
-pfile.write ('Transform5='+str(best_transform.GetParameters().GetElement(4))+'\n')
-pfile.write ('Transform6='+str(best_transform.GetParameters().GetElement(5))+'\n')
-pfile.close ()
+if do_permutations:
+    try: pfile = open(os.path.join(dirname,parameterfile), "w")
+    except: lprint ('ERROR opening parameterfile'); sys.exit(2)
+    pfile.write ('Model=VersorRigid3DTransform\n')
+    pfile.write ('Transpose_initial='+str(transpose_initial[0]+1)+',')
+    pfile.write (str(transpose_initial[1]+1)+','+str(transpose_initial[2]+1)+'\n')
+    pfile.write ('Permutation='+str(permutations[best_index,0])+',')
+    pfile.write (str(permutations[best_index,1])+','+str(permutations[best_index,2])+'\n')
+    pfile.write ('Transform1='+str(best_transform.GetParameters().GetElement(0))+'\n')
+    pfile.write ('Transform2='+str(best_transform.GetParameters().GetElement(1))+'\n')
+    pfile.write ('Transform3='+str(best_transform.GetParameters().GetElement(2))+'\n')
+    pfile.write ('Transform4='+str(best_transform.GetParameters().GetElement(3))+'\n')
+    pfile.write ('Transform5='+str(best_transform.GetParameters().GetElement(4))+'\n')
+    pfile.write ('Transform6='+str(best_transform.GetParameters().GetElement(5))+'\n')
+    pfile.close ()
 
 #write NIFTI
 lprint ('Writing registration result ')
