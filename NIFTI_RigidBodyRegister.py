@@ -203,7 +203,7 @@ else: transpose_initial = [0,1,2]
 transpose_initial =  np.asarray(transpose_initial)
 lprint ('Applying initial transpose: '+np.array2string(transpose_initial+1))
 data_moving = np.transpose (data_moving, axes=transpose_initial).copy()
-
+SpatResol_moving = SpatResol_moving[transpose_initial]
 
 if do_permutations:
     # check fixed for largest extension in dimension 0
@@ -219,7 +219,7 @@ if do_permutations:
         data_moving_per = np.transpose (data_moving, axes=np.abs(permutations[i])-1).copy() # copy required for GetImageFromArray
         data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
         data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
-        SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
+        #SpatResol_moving = SpatResol_moving[[2,1,0]]                         #don't use this, it's wrong
         if permutations[i,0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
         if permutations[i,1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
         if permutations[i,2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
@@ -316,7 +316,7 @@ if do_permutations:
     best_transform = transform_list[best_index]
     lprint ('Best registration result obtained with permutation: %d' % best_index)
     permutation_to_apply = permutations[best_index]
-else: # gete transformation parameters from previousely saved file
+else: # get transformation parameters from previousely saved file
     s = param_dict['Permutation'].split(',')
     permutation_to_apply = [int(s[0]),int(s[1]),int(s[2])] 
     p1 = param_dict['Transform1']; p2 = param_dict['Transform2']
@@ -349,7 +349,7 @@ else: # gete transformation parameters from previousely saved file
 data_moving_per = np.transpose (data_moving, axes=np.abs(permutation_to_apply)-1).copy()
 data_moving_per = np.transpose (data_moving_per, axes=(2,1,0)).copy() #fix inversion of dimensions
 data_moving_per_shape = np.asarray(data_moving_per.shape)[[2,1,0]]    #fix inversion of dimensions
-SpatResol_moving = SpatResol_moving[[2,1,0]]                          #fix inversion of dimensions
+#SpatResol_moving = SpatResol_moving[[2,1,0]]                         #don't use this, it's wrong
 if permutation_to_apply[0]<0: data_moving_per[:,:,:]=data_moving_per[::-1,:,:]
 if permutation_to_apply[1]<0: data_moving_per[:,:,:]=data_moving_per[:,::-1,:]
 if permutation_to_apply[2]<0: data_moving_per[:,:,:]=data_moving_per[:,:,::-1]
