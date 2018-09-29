@@ -4,7 +4,7 @@
 #  - Metric "AdvancedMattesMutualInformation"
 #  - Optimizer "AdaptiveStochasticGradientDescent"
 #  - Transforms: 
-#    1) permutation of dimensions (affine)
+#    1) permutation of dimensions
 #    2) rough estimation of rotation along largest dimension (rotx)
 #    3) Transform "EulerTransform"
 #    4) Transform "BSplineTransform"
@@ -174,7 +174,7 @@ def make_rotx_parameters():
     f.write ('(FullSearchSpace0  "rotation_x" 0 -0.8 0.8 0.2)\n')
     # if necessary uncomment following line(s) and comment preceeding    
     # f.write ('(FullSearchSpace0 "rotation_x" 0 -0.8 0.8 0.2 \
-    #          "translation_y" 4 -2 2 0.5 "translation_z" 5 -2 2 0.5)\n')       
+    #           "translation_y" 4 -2 2 0.5 "translation_z" 5 -2 2 0.5)\n')       
     f.write ('(NumberOfHistogramBins 64)\n')    
     f.write ('(FixedLimitRangeRatio 0.0)\n')
     f.write ('(MovingLimitRangeRatio 0.0)\n')
@@ -332,11 +332,11 @@ TKwindows.update()
 #intercatively choose input NIFTI files
 nfiles=0
 answer="dummy"
-FIDfile1 = askopenfilename(title="Choose moving NIFTI file (A)", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
-if FIDfile1 == "": print ('ERROR: X input file not specified'); exit(2)
+FIDfile1 = askopenfilename(title="Choose moving NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+if FIDfile1 == "": print ('ERROR: 1st input file not specified'); exit(2)
 FIDfile1 = os.path.abspath(FIDfile1) 
-FIDfile2 = askopenfilename(title="Choose reference NIFTI file (B) or transformfile", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
-if FIDfile2 == "": print ('ERROR: Y input file not specified'); exit(2)
+FIDfile2 = askopenfilename(title="Choose fixed reference NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+if FIDfile2 == "": print ('ERROR: 2nd input file not specified'); exit(2)
 FIDfile2 = os.path.abspath(FIDfile2) 
 TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
@@ -384,8 +384,6 @@ Shape_moving = Shape_moving[transpose_moving]
 
 permutation_arr = permutations()
 for i in range (permutation_arr.shape[0]):
-    #data_moving_perm = np.zeros (shape=data_moving.shape, dtype=np.float64)
-    #data_moving_perm[:,:,:] = np.transpose (data_moving, axes=np.abs(permutation_arr[i])-1)
     data_moving_perm = np.transpose (data_moving, axes=np.abs(permutation_arr[i])-1).copy()
     if permutation_arr[i,0]<0: data_moving_perm[:,:,:]=data_moving_perm[::-1,:,:]
     if permutation_arr[i,1]<0: data_moving_perm[:,:,:]=data_moving_perm[:,::-1,:]
@@ -484,14 +482,11 @@ optimum = np.argmin(metric)
 copyfile (os.path.join(tempdir,'rigid_'+str(optimum+1)+'_transform.txt'),
           os.path.join(tempdir,'rigid_transform.txt'))
 copyfile (os.path.join(tempdir,'rotx_'+str(optimum+1)+'_transform.txt'),
-          os.path.join(tempdir,'rotx_transform.txt'))              
-copyfile (os.path.join(tempdir,'affine_'+str(optimum+1)+'_transform.txt'),
-          os.path.join(tempdir,'affine_transform.txt'))              
+          os.path.join(tempdir,'rotx_transform.txt'))                         
 #cleanup    
 for i in range (permutation_arr.shape[0]):   
     deletefile(os.path.join(tempdir,'rigid_' +str(i+1)+'_transform.txt'))
-    deletefile(os.path.join(tempdir,'rotx_' +str(i+1)+'_transform.txt'))    
-    deletefile(os.path.join(tempdir,'affine_'+str(i+1)+'_transform.txt'))    
+    deletefile(os.path.join(tempdir,'rotx_' +str(i+1)+'_transform.txt'))        
 lprint ('Best  permutation is at %2d: %f' % (optimum, metric[optimum]))    
     
 #bspline registration
@@ -538,7 +533,38 @@ img.set_sform(affine_fixed, int(hdr_fixed['qform_code']))
 try: nib.save(img, os.path.join(dirname,outfile))
 except: lprint ('ERROR:  problem while writing results'); exit(1)
 lprint ('Successfully written output file '+outfile)
-           
+
+#get transforms
+with open(os.path.join(tempdir,'rotx_transform.txt')) as f: content1 = f.readlines()
+with open(os.path.join(tempdir,'rigid_transform.txt')) as f: content2 = f.readlines()
+with open(os.path.join(tempdir,'bspline_transform.txt')) as f: content3 = f.readlines()
+#write transforms
+f = open(os.path.join(dirname,basename+'_Register.transform'), "w")
+f.write ('//------Transform_file_start------(rotx_transform.txt)\n')        
+for item in content1: f.write (item.replace (tempdir, '.'))
+f.write ('//------Transform_file_start------(rigid_transform.txt)\n')        
+for item in content2: f.write (item.replace (tempdir, '.')) 
+f.write ('//------Transform_file_start------(bspline_transform.txt)\n')    
+for item in content3: f.write (item.replace (tempdir, '.'))
+#write additional stuff   
+f.write ('//------Transform_file_start------(additional_parameters.txt)\n')
+f.write ('Transpose_Moving=%s,%s,%s\n' % (transpose_moving[0],transpose_moving[1],transpose_moving[2]))
+f.write ('Transpose_Fixed=%s,%s,%s\n' %  (transpose_fixed[0], transpose_fixed[1], transpose_fixed[2]))
+f.write ('Transpose_Best=%s,%s,%s\n' %  (permutation_arr[optimum,0], permutation_arr[optimum,1], permutation_arr[optimum,2]))
+f.write ('Affine_Matrix=%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' %\
+         (affine_fixed[0,0],affine_fixed[0,1],affine_fixed[0,2],affine_fixed[0,3],
+          affine_fixed[1,0],affine_fixed[1,1],affine_fixed[1,2],affine_fixed[1,3],
+          affine_fixed[2,0],affine_fixed[2,1],affine_fixed[2,2],affine_fixed[2,3],
+          affine_fixed[3,0],affine_fixed[3,1],affine_fixed[3,2],affine_fixed[3,3]))
+f.write ('Sform_Code=%s\n' % hdr_fixed['sform_code'])
+f.write ('Qform_Code=%s\n' % hdr_fixed['qform_code'])
+f.write ('xyzt_units1=%s\n' % hdr_fixed.get_xyzt_units()[0])
+f.write ('xyzt_units2=%s\n' % hdr_fixed.get_xyzt_units()[1])
+f.write ('//------Transform_file_start------(full_header.txt)\n')
+f.write (str(hdr_fixed))
+f.write ('\n')
+f.close()
+      
 #end
 exit(0)
 
