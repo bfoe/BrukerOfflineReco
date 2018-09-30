@@ -470,9 +470,9 @@ del img_fixed; del data_fixed
 make_rigid_parameters()                        
 permutation_arr = permutations()
 metric = np.zeros(shape=permutation_arr.shape[0], dtype=np.float32)
+make_rotx_parameters()
 lprint ('Start registration')
 for i in range (permutation_arr.shape[0]):
-    make_rotx_parameters()
     infile_moving_perm=os.path.join(tempdir,'moving'+str(i)+'.nii')
     copyfile (os.path.join(tempdir,'affine_'+str(i+1)+'_transform.txt'),
               os.path.join(tempdir,'affine_transform.txt'))     
