@@ -151,8 +151,13 @@ def copyfile(filename1,filename2):
     
 def run (command):
     process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)   
-    (stdout, stderr) = process.communicate()    
-
+    (stdout, stderr) = process.communicate()
+    if process.returncode!=0:
+       lprint ('WARNING: Subprocess call returned with error (see logfile for details)')
+       logfile.write (command)   
+       logfile.write (stderr)
+       logfile.write (stdout)
+       
 def make_rotx_parameters():
     f = open(os.path.join(tempdir,'rotx_parameters.txt'), "w")
     f.write ('(FixedInternalImagePixelType "float")\n')
