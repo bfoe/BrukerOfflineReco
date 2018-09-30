@@ -130,6 +130,12 @@ def permutations():
     return result
     
 def invert_transpose(transp):
+    #do some test to guarantee correct results
+    try:test = np.asarray(transp)
+    except: lprint('Error inverting transpose array (1)'); exit(0)
+    if not np.array_equal(np.sort(test),range(test.shape[0])): 
+        lprint('Error inverting transpose array (2)'); exit(0)
+    #actually invert the array
     result=[]
     for i in range(len(transp)): result.append(transp.index(i))
     return result
@@ -314,6 +320,13 @@ if sys.platform=="win32":
 signal.signal(signal.SIGINT, signal_handler)  # keyboard interrupt
 signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
 if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
+#check for external executables
+if not os.path.isfile(os.path.join(resourcedir,'elastix.exe')):
+    lprint ('ERROR:  Elastix executable not found '); exit(1)
+if not os.path.isfile(os.path.join(resourcedir,'transformix.exe')):
+    lprint ('ERROR:  Transformix executable not found '); exit(1)    
+if not os.path.isfile(os.path.join(resourcedir,'ANNlib-4.9.dll')):
+    lprint ('ERROR:  Elastix DLL not found '); exit(1)    
    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
@@ -377,7 +390,7 @@ directions_moving = directions_moving[::-1] # decreasing order
 if directions_moving[0]==1: transpose_moving = [1,2,0]
 elif directions_moving[0]==2: transpose_moving = [2,0,1]
 else: transpose_moving = [0,1,2]
-lprint ('Moving image transposition: '+str(transpose_moving))
+lprint ('Moving image transposition: '+np.array2string(np.asarray(transpose_moving)+1))
 data_moving = np.transpose (data_moving, axes=transpose_moving)
 SpatResol_moving = SpatResol_moving[transpose_moving]
 Shape_moving = Shape_moving[transpose_moving]
@@ -422,7 +435,7 @@ directions_fixed = directions_fixed[::-1] # decreasing order
 if directions_fixed[0]==1: transpose_fixed = [1,2,0]
 elif directions_fixed[0]==2: transpose_fixed = [2,0,1]
 else: transpose_fixed = [0,1,2]
-lprint ('Fixed  image transposition: '+str(transpose_fixed))
+lprint ('Fixed  image transposition: '+np.array2string(np.asarray(transpose_fixed)+1))
 data_fixed  = np.transpose (data_fixed, axes=transpose_fixed)
 SpatResol_fixed = SpatResol_fixed[transpose_fixed]
 Shape_fixed = Shape_fixed[transpose_fixed]
@@ -516,7 +529,7 @@ SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
 #fix directions
 transpose_fixed_inv = invert_transpose(transpose_fixed)
-lprint ('Inverse fixed image transposition: '+str(transpose_fixed_inv))
+lprint ('Inverse fixed image transposition: '+np.array2string(np.asarray(transpose_fixed_inv)+1))
 data = np.transpose (data, axes=transpose_fixed_inv)
 SpatResol = SpatResol[transpose_fixed_inv]
 Shape = Shape[transpose_fixed_inv]
@@ -548,8 +561,8 @@ f.write ('//------Transform_file_start------(bspline_transform.txt)\n')
 for item in content3: f.write (item.replace (tempdir, '.'))
 #write additional stuff   
 f.write ('//------Transform_file_start------(additional_parameters.txt)\n')
-f.write ('Transpose_Moving=%s,%s,%s\n' % (transpose_moving[0],transpose_moving[1],transpose_moving[2]))
-f.write ('Transpose_Fixed=%s,%s,%s\n' %  (transpose_fixed[0], transpose_fixed[1], transpose_fixed[2]))
+f.write ('Transpose_Moving=%s,%s,%s\n' % (transpose_moving[0]+1,transpose_moving[1]+1,transpose_moving[2]+1))
+f.write ('Transpose_Fixed=%s,%s,%s\n' %  (transpose_fixed[0]+1, transpose_fixed[1]+1, transpose_fixed[2]+1))
 f.write ('Transpose_Best=%s,%s,%s\n' %  (permutation_arr[optimum,0], permutation_arr[optimum,1], permutation_arr[optimum,2]))
 f.write ('Affine_Matrix=%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' %\
          (affine_fixed[0,0],affine_fixed[0,1],affine_fixed[0,2],affine_fixed[0,3],

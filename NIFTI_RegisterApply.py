@@ -109,18 +109,14 @@ def lprint (text):
     print (text);
     logfile.write(text+'\n')
     logfile.flush()
-                         
-            
-def permutations():
-    dirs  = np.asarray ([[1,2,3],[1,3,2]])
-    signs = np.asarray ([[1,1,1],[1,1,-1],[1,-1,1],[-1,1,1],[-1,-1,1],[-1,1,-1],[1,-1,-1],[-1,-1,-1]])
-    result = np.zeros ((dirs.shape[0]*signs.shape[0],3), dtype=int)
-    for i in range(dirs.shape[0]):
-        for j in range(signs.shape[0]):
-              result [i*signs.shape[0]+j,:]=dirs[i,:]*signs[j,:]
-    return result
     
 def invert_transpose(transp):
+    #do some test to guarantee correct results
+    try:test = np.asarray(transp)
+    except: lprint('Error inverting transpose array (1)'); exit(0)
+    if not np.array_equal(np.sort(test),range(test.shape[0])): 
+        lprint('Error inverting transpose array (2)'); exit(0)
+    #actually invert the array
     result=[]
     for i in range(len(transp)): result.append(transp.index(i))
     return result
@@ -168,6 +164,11 @@ if sys.platform=="win32":
 signal.signal(signal.SIGINT, signal_handler)  # keyboard interrupt
 signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
 if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
+if not os.path.isfile(os.path.join(resourcedir,'transformix.exe')):
+    lprint ('ERROR:  Transformix executable not found '); exit(1)    
+if not os.path.isfile(os.path.join(resourcedir,'ANNlib-4.9.dll')):
+    lprint ('ERROR:  Transformix DLL not found '); exit(1)
+
    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
@@ -202,7 +203,7 @@ TransformFile=str(TransformFile)
 dirname  = os.path.dirname(FIDfile1)
 basename = os.path.basename(FIDfile1)
 basename = basename[0:basename.rfind('.nii.gz')]
-outfile = basename+'_Transform.nii.gz'
+outfile = basename+'_Transformed.nii.gz'
 logname = basename+'_Transform.log'
 try: logfile = open(os.path.join(dirname,logname), "w")
 except: print ('ERROR opening logfile'); exit(2)
@@ -244,9 +245,9 @@ for item in content:
     value = ParseSingleValue(current_line)
     moreparameters_dict[param_name] = value
 t = moreparameters_dict['Transpose_Moving'].split(',')
-transpose_moving = [int(i) for i in t]
+transpose_moving = [int(i)-1 for i in t]
 t = moreparameters_dict['Transpose_Fixed'].split(',')
-transpose_fixed = [int(i) for i in t]
+transpose_fixed = [int(i)-1 for i in t]
 t = moreparameters_dict['Transpose_Best'].split(',')
 transpose_best = [int(i) for i in t]
 t = moreparameters_dict['Affine_Matrix'].split(',')
@@ -264,7 +265,7 @@ data_moving = img_moving.get_data().astype(np.float64)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
 #fix main directions
-lprint ('Moving image transposition: '+str(transpose_moving))
+lprint ('Moving image transposition: '+np.array2string(np.asarray(transpose_moving)+1))
 data_moving = np.transpose (data_moving, axes=transpose_moving)
 SpatResol_moving = SpatResol_moving[transpose_moving]
 Shape_moving = Shape_moving[transpose_moving]
@@ -307,7 +308,7 @@ SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
 #fix directions
 transpose_fixed_inv = invert_transpose(transpose_fixed)
-lprint ('Inverse fixed image transposition: '+str(transpose_fixed_inv))
+lprint ('Inverse fixed image transposition: '+np.array2string(np.asarray(transpose_fixed_inv)+1))
 data = np.transpose (data, axes=transpose_fixed_inv)
 SpatResol = SpatResol[transpose_fixed_inv]
 Shape = Shape[transpose_fixed_inv]
