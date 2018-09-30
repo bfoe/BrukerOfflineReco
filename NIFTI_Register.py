@@ -323,11 +323,11 @@ signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
 if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
 #check for external executables
 if not os.path.isfile(os.path.join(resourcedir,'elastix.exe')):
-    lprint ('ERROR:  Elastix executable not found '); exit(1)
+    print ('ERROR:  Elastix executable not found '); exit(1)
 if not os.path.isfile(os.path.join(resourcedir,'transformix.exe')):
-    lprint ('ERROR:  Transformix executable not found '); exit(1)    
+    print ('ERROR:  Transformix executable not found '); exit(1)    
 if not os.path.isfile(os.path.join(resourcedir,'ANNlib-4.9.dll')):
-    lprint ('ERROR:  Elastix DLL not found '); exit(1)    
+    print ('ERROR:  Elastix DLL not found '); exit(1)    
    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window

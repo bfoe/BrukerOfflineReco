@@ -167,9 +167,9 @@ signal.signal(signal.SIGINT, signal_handler)  # keyboard interrupt
 signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
 if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
 if not os.path.isfile(os.path.join(resourcedir,'transformix.exe')):
-    lprint ('ERROR:  Transformix executable not found '); exit(1)    
+    print ('ERROR:  Transformix executable not found '); exit(1)    
 if not os.path.isfile(os.path.join(resourcedir,'ANNlib-4.9.dll')):
-    lprint ('ERROR:  Transformix DLL not found '); exit(1)
+    print ('ERROR:  Transformix DLL not found '); exit(1)
 
    
 #TK initialization       
