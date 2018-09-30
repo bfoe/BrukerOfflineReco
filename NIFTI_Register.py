@@ -381,9 +381,10 @@ except: lprint ('ERROR:  Problem creating temp dir: '+tempdir); exit(1)
 lprint ('Read  NIFTI files')
 #read moving NIFTI file
 img_moving = nib.load(FIDfile1)
-data_moving = img_moving.get_data().astype(np.float64)
+data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
+img_moving = 0 # free memory
 #find and fix main directions
 FOV_moving = data_moving.shape*SpatResol_moving
 directions_moving = np.argsort(FOV_moving)
@@ -426,9 +427,10 @@ img_moving_perm = 0; data_moving_perm = 0; data_moving = 0
 #read fixed NIFTI file
 img_fixed = nib.load(FIDfile2)
 hdr_fixed = img_fixed.header; affine_fixed = img_fixed.affine #save header info
-data_fixed = img_fixed.get_data().astype(np.float64)
+data_fixed = img_fixed.get_data().astype(np.float32)
 SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
 Shape_fixed = np.asarray(img_fixed.header.get_data_shape())
+img_fixed = 0 # free memory
 #find and fix main directions
 FOV_fixed = data_fixed.shape*SpatResol_fixed
 directions_fixed = np.argsort(FOV_fixed)
@@ -525,7 +527,7 @@ command +='-tp "'+os.path.join(tempdir,'bspline_transform.txt')+'" '
 run (command)
 #rewrite NIFTI
 img = nib.load(os.path.join(tempdir,'result.nii.gz'))
-data = img.get_data().astype(np.float64)
+data = img.get_data().astype(np.float32)
 SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
 #fix directions

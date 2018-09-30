@@ -263,9 +263,10 @@ xyzt_units2 = moreparameters_dict['xyzt_units2']
 #read moving NIFTI file
 lprint ('Read  NIFTI file')
 img_moving = nib.load(FIDfile1)
-data_moving = img_moving.get_data().astype(np.float64)
+data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
+img_moving = 0 # free memory
 #fix main directions
 lprint ('Moving image transposition: '+np.array2string(np.asarray(transpose_moving)+1))
 data_moving = np.transpose (data_moving, axes=transpose_moving)
@@ -305,7 +306,7 @@ command +='-tp "'+os.path.join(tempdir,'bspline_transform.txt')+'" '
 run (command)
 #rewrite NIFTI
 img = nib.load(os.path.join(tempdir,'result.nii.gz'))
-data = img.get_data().astype(np.float64)
+data = img.get_data().astype(np.float32)
 SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
 #fix directions
