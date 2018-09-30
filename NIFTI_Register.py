@@ -115,10 +115,11 @@ def exit (code):
 
 def lprint (text):
     text = str(text)
-    print (text);
-    logfile.write(text+'\n')
-    logfile.flush()
-                         
+    print (text)
+    try:
+       logfile.write(text+'\n')
+       logfile.flush()
+    except: pass
             
 def permutations():
     dirs  = np.asarray ([[1,2,3],[1,3,2]])

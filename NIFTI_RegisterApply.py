@@ -106,10 +106,12 @@ def exit (code):
 
 def lprint (text):
     text = str(text)
-    print (text);
-    logfile.write(text+'\n')
-    logfile.flush()
-    
+    print (text)
+    try:
+       logfile.write(text+'\n')
+       logfile.flush()
+    except: pass
+
 def invert_transpose(transp):
     #do some test to guarantee correct results
     try:test = np.asarray(transp)
