@@ -271,7 +271,7 @@ img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
-img_moving = 0 # free memory
+del img_moving  # free memory
 #fix main directions
 lprint ('Moving image transposition: '+np.array2string(np.asarray(transpose_moving)+1))
 data_moving = np.transpose (data_moving, axes=transpose_moving)
@@ -300,7 +300,7 @@ img_moving.set_sform(aff, code=1)
 img_moving.set_qform(aff, code=1)
 nib.save(img_moving, os.path.join(tempdir,'moving.nii'))
 #free memory
-img_moving = 0; data_moving = 0
+del img_moving; del data_moving
  
 #apply transforms
 lprint ('Apply transforms') 

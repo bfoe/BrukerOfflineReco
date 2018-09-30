@@ -389,7 +389,7 @@ img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
-img_moving = 0 # free memory
+del img_moving # free memory
 #find and fix main directions
 FOV_moving = data_moving.shape*SpatResol_moving
 directions_moving = np.argsort(FOV_moving)
@@ -427,7 +427,7 @@ for i in range (permutation_arr.shape[0]):
     infile_moving_perm=os.path.join(tempdir,'moving'+str(i)+'.nii')
     nib.save(img_moving_perm, infile_moving_perm)
 #free memory
-img_moving_perm = 0; data_moving_perm = 0; data_moving = 0
+del img_moving_perm; del data_moving_perm; del data_moving
 
 #read fixed NIFTI file
 img_fixed = nib.load(FIDfile2)
@@ -435,7 +435,7 @@ hdr_fixed = img_fixed.header; affine_fixed = img_fixed.affine #save header info
 data_fixed = img_fixed.get_data().astype(np.float32)
 SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
 Shape_fixed = np.asarray(img_fixed.header.get_data_shape())
-img_fixed = 0 # free memory
+del img_fixed # free memory
 #find and fix main directions
 FOV_fixed = data_fixed.shape*SpatResol_fixed
 directions_fixed = np.argsort(FOV_fixed)
@@ -464,8 +464,7 @@ img_fixed.set_qform(aff, code=1)
 infile_fixed=os.path.join(tempdir,'fixed.nii')
 nib.save(img_fixed, infile_fixed)
 #free memory
-img_fixed = 0; data_fixed = 0
-
+del img_fixed; del data_fixed
 
 #get started    
 make_rigid_parameters()                        
