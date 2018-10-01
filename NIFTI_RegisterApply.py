@@ -312,6 +312,9 @@ img = nib.load(os.path.join(tempdir,'result.nii.gz'))
 data = img.get_data().astype(np.float32)
 SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
+#check for black image error
+if np.amax(data)==0:
+    lprint ('ERROR: resulting image is empty'); exit(1)
 #fix directions
 transpose_fixed_inv = invert_transpose(transpose_fixed)
 lprint ('Inverse fixed image transposition: '+np.array2string(np.asarray(transpose_fixed_inv)+1))
