@@ -207,9 +207,9 @@ data2 = data2.astype(np.int16)
 #save NIFTI's
 print ('Writing output files')
 aff = np.eye(4)
-aff[0,0] = SpatResol[0]*1000; aff[0,3] = -(data.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol[1]*1000; aff[1,3] = -(data.shape[1]/2)*aff[1,1]
-aff[2,2] = SpatResol[2]*1000; aff[2,3] = -(data.shape[2]/2)*aff[2,2]
+aff[0,0] = SpatResol[0]; aff[0,3] = -(data.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol[1]; aff[1,3] = -(data.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol[2]; aff[2,3] = -(data.shape[2]/2)*aff[2,2]
 NIFTIimg = nib.Nifti1Image(data2, aff)
 NIFTIimg.header.set_slope_inter(max_data2/32767.,0)
 NIFTIimg.header.set_xyzt_units(3, 8)
