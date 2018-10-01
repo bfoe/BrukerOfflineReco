@@ -161,7 +161,6 @@ def run (command):
 def make_rotx_parameters():
     f = open(os.path.join(tempdir,'rotx_parameters.txt'), "w")
     f.write ('(NumberOfSpatialSamples 1000 2000 4000)\n')
-    f.write ('(MaximumNumberOfIterations 100 200 400)\n')
     f.write ('(FixedInternalImagePixelType "float")\n')
     f.write ('(FixedImageDimension 3)\n')
     f.write ('(MovingInternalImagePixelType "float")\n')
@@ -530,6 +529,9 @@ img = nib.load(os.path.join(tempdir,'result.nii.gz'))
 data = img.get_data().astype(np.float32)
 SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
+#check for black image error
+if np.amax(data)==0:
+    lprint ('ERROR: resulting image is empty'); exit(1)
 #fix directions
 transpose_fixed_inv = invert_transpose(transpose_fixed)
 lprint ('Inverse fixed image transposition: '+np.array2string(np.asarray(transpose_fixed_inv)+1))
