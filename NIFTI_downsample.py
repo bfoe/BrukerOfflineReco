@@ -35,10 +35,6 @@
 from __future__ import print_function
 import sys
 import os
-import signal
-import datetime
-import shutil
-import subprocess
 import numpy as np
 import nibabel as nib
 
