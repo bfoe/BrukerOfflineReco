@@ -237,7 +237,7 @@ def make_rigid_parameters():
     f.write ('(ResultImageFormat "nii.gz")\n')
     f.write ('(CompressResultImage "true")\n')
     f.write ('(Resampler "DefaultResampler")\n')
-    f.write ('(NumberOfHistogramBins 32 64 128)\n')
+    f.write ('(NumberOfHistogramBins 32 64 64)\n')
     f.write ('(Optimizer "AdaptiveStochasticGradientDescent")\n')
     f.write ('(MovingImagePyramid "MovingRecursiveImagePyramid")\n')
     f.write ('(FixedImagePyramid "FixedRecursiveImagePyramid")\n') 
@@ -275,7 +275,7 @@ def make_bspline_parameters():
     f.write ('(CompressResultImage "true")\n')
     f.write ('(Resampler "DefaultResampler")\n')
     f.write ('(FinalGridSpacingInVoxels 50 50 50)\n')
-    f.write ('(NumberOfHistogramBins 32 64 128)\n')
+    f.write ('(NumberOfHistogramBins 32 64 64)\n')
     f.write ('(Optimizer "AdaptiveStochasticGradientDescent")\n')
     f.write ('(MovingImagePyramid "MovingRecursiveImagePyramid")\n')
     f.write ('(FixedInternalImagePixelType "float")\n')
@@ -387,8 +387,6 @@ img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
-if img_moving.header.get_xyzt_units()[0]=="micron":
-    SpatResol_moving /=1000.
 del img_moving # free memory
 #find and fix main directions
 FOV_moving = data_moving.shape*SpatResol_moving
@@ -421,7 +419,7 @@ for i in range (permutation_arr.shape[0]):
     aff[2,2] = SpatResol_moving_perm[2]; aff[2,3] = -(Shape_moving_perm[2]/2)*aff[2,2]
     img_moving_perm = nib.Nifti1Image(data_moving_perm, aff)
     img_moving_perm.header.set_slope_inter(max_moving_perm/32767.,0)
-    img_moving_perm.header.set_xyzt_units(2, 8) # in mm and s
+    img_moving_perm.header.set_xyzt_units(3, 8)   
     img_moving_perm.set_sform(aff, code=1)
     img_moving_perm.set_qform(aff, code=1)
     infile_moving_perm=os.path.join(tempdir,'moving'+str(i)+'.nii')
@@ -435,8 +433,6 @@ hdr_fixed = img_fixed.header; affine_fixed = img_fixed.affine #save header info
 data_fixed = img_fixed.get_data().astype(np.float32)
 SpatResol_fixed = np.asarray(img_fixed.header.get_zooms())
 Shape_fixed = np.asarray(img_fixed.header.get_data_shape())
-if img_fixed.header.get_xyzt_units()[0]=="micron":
-    SpatResol_fixed /=1000.
 del img_fixed # free memory
 #find and fix main directions
 FOV_fixed = data_fixed.shape*SpatResol_fixed
@@ -460,7 +456,7 @@ aff[1,1] = -SpatResol_fixed[1]; aff[1,3] = -(Shape_fixed[1]/2)*aff[1,1]
 aff[2,2] = SpatResol_fixed[2]; aff[2,3] = -(Shape_fixed[2]/2)*aff[2,2]
 img_fixed = nib.Nifti1Image(data_fixed, aff)
 img_fixed.header.set_slope_inter(max_fixed/32767.,0)
-img_fixed.header.set_xyzt_units(2, 8) # in mm and s
+img_fixed.header.set_xyzt_units(3, 8)
 img_fixed.set_sform(aff, code=1)
 img_fixed.set_qform(aff, code=1)
 infile_fixed=os.path.join(tempdir,'fixed.nii')

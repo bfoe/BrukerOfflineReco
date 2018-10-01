@@ -269,8 +269,6 @@ img_moving = nib.load(FIDfile1)
 data_moving = img_moving.get_data().astype(np.float32)
 SpatResol_moving = np.asarray(img_moving.header.get_zooms())
 Shape_moving = np.asarray(img_moving.header.get_data_shape())
-if img_moving.header.get_xyzt_units()[0]=="micron":
-    SpatResol_moving /=1000.
 del img_moving  # free memory
 #fix main directions
 lprint ('Moving image transposition: '+np.array2string(np.asarray(transpose_moving)+1))
@@ -292,10 +290,10 @@ data_moving = data_moving.astype(np.int16)
 aff = np.eye(4)
 aff[0,0] = -SpatResol_moving[0]; aff[0,3] = -(Shape_moving[0]/2)*aff[0,0]
 aff[1,1] = -SpatResol_moving[1]; aff[1,3] = -(Shape_moving[1]/2)*aff[1,1]
-aff[2,2] =  SpatResol_moving[2]; aff[2,3] = -(Shape_moving[2]/2)*aff[2,2]
+aff[2,2] = SpatResol_moving[2]; aff[2,3] = -(Shape_moving[2]/2)*aff[2,2]
 img_moving = nib.Nifti1Image(data_moving, aff)
 img_moving.header.set_slope_inter(max_moving/32767.,0)
-img_moving.header.set_xyzt_units(2, 8) # in mm and s
+img_moving.header.set_xyzt_units(3, 8)
 img_moving.set_sform(aff, code=1)
 img_moving.set_qform(aff, code=1)
 nib.save(img_moving, os.path.join(tempdir,'moving.nii'))
