@@ -100,15 +100,15 @@ def anlyze_histogram (d):
     #find minimum
     start=ybins.argmax()
     i=start;x_min=0;y_min=ybins[start]
-    while i<len(ybins):
-        i+=1
+    while i<len(ybins)-1:
+        i+=1       
         if ybins[i]<=y_min: y_min=ybins[i]; x_min=i; 
         else: i=len(ybins);
     minimum=xbins[x_min]
     #find maximum
     start=x_min
     i=start;x_max=0;y_max=ybins[start]
-    while i<len(ybins):
+    while i<len(ybins)-1:
         i+=1
         if ybins[i]>y_max: y_max=ybins[i]; x_max=i; 
         else: i=len(ybins);
