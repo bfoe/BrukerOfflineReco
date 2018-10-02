@@ -317,9 +317,9 @@ if __name__ == '__main__':
     #save NIFTI
     lprint ('Writing output file')
     aff = np.eye(4)
-    aff[0,0] = SpatResol1[0]*1000; aff[0,3] = -(data.shape[0]/2)*aff[0,0]
-    aff[1,1] = SpatResol1[1]*1000; aff[1,3] = -(data.shape[1]/2)*aff[1,1]
-    aff[2,2] = SpatResol1[2]*1000; aff[2,3] = -(data.shape[2]/2)*aff[2,2]
+    aff[0,0] = SpatResol1[0]; aff[0,3] = -(data.shape[0]/2)*aff[0,0]
+    aff[1,1] = SpatResol1[1]; aff[1,3] = -(data.shape[1]/2)*aff[1,1]
+    aff[2,2] = SpatResol1[2]; aff[2,3] = -(data.shape[2]/2)*aff[2,2]
     NIFTIimg = nib.Nifti1Image(data, aff)
     NIFTIimg.header.set_slope_inter(max_data/32767.,0)
     NIFTIimg.header.set_xyzt_units(3, 8)
