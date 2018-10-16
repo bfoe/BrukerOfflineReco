@@ -72,9 +72,11 @@ def usage ():
     print ('Usage: '+Program_name+' [arguments]')
     print ('')
     print ('   arguments are optional')
-    print ('   if specified must be 3 interger numbers I J K')
-    print ('   where I=shift, J=roll1, K=roll2')
-    print ('   example: '+Program_name+' 124 -2 5')   
+    print ('   if specified must be 3 interger numbers I J K L')
+    print ('   where I=shift, J=roll1, K=roll2, L=Histogram correction')
+    print ('   with                             L=0   (calculate automatically)')
+    print ('   or                               L=1.0 (no correction)')
+    print ('   example: '+Program_name+' 124 -2 5 1.2')   
     print ('') 
     
 def smooth(x,window_len):
@@ -199,18 +201,20 @@ if __name__ == '__main__':
     SpatResol2 = np.asarray(img2.header.get_zooms())
 
     # get commandline parameters (if present)
+    hist_cor = 0
     if    len(sys.argv) == 1: 
        optimize = True
-    elif  len(sys.argv) == 4: 
+    elif  len(sys.argv) == 5: 
        optimize = False
        try:
           max_i = int(sys.argv[1]) 
           max_j = int(sys.argv[2])
-          max_k = int(sys.argv[3])       
+          max_k = int(sys.argv[3])
+          hist_cor = float(sys.argv[4])          
        except:
           print ('ERROR evaluating command line arguments')
           usage(); sys.exit(2)  
-       if max_i>data1.shape[1]*0.5: print ('ERROR: shift too large'); sys.exit(2)
+       if max_i>data1.shape[1]*0.99: print ('ERROR: shift too large'); sys.exit(2)
        if max_i<0: print ('ERROR: shift too small'); sys.exit(2)
        if abs(max_j)>data1.shape[0]*0.2: print ('ERROR: roll1 out of range'); sys.exit(2)
        if abs(max_k)>data1.shape[2]*0.2: print ('ERROR: roll2 out of range'); sys.exit(2)            
@@ -219,13 +223,18 @@ if __name__ == '__main__':
        usage(); sys.exit(2)
       
     # histogram correction
-    min1, max1, high1 = anlyze_histogram(data1)
-    min2, max2, high2 = anlyze_histogram(data2)
-    factor = high2/high1
-    data2 /= factor
-    lprint ('Histogram correction: %0.2f' % factor)
-
-
+    if hist_cor == 0:
+        min1, max1, high1 = anlyze_histogram(data1)
+        min2, max2, high2 = anlyze_histogram(data2)
+        factor = high2/high1
+        data2 /= factor
+        lprint ('Histogram correction: %0.2f' % factor)
+    elif hist_cor == 1:
+        lprint ('Histogram correction disabled (1.0)')    
+    else:
+        data2 /= hist_cor
+        lprint ('Histogram correction: %0.2f' % hist_cor)
+        
     #some checks
     if not np.array_equal(data1.shape,data2.shape): lprint ('ERROR: image dimension mismatch'); sys.exit(2)
     if not np.array_equal(SpatResol1,SpatResol2): lprint ('ERROR: image resolution mismatch'); sys.exit(2)
@@ -238,7 +247,7 @@ if __name__ == '__main__':
     lprint ('Overlap is %d' % overlap)    
     if optimize:
         #fast search along overlap direction only
-        stitch_search_range = int(0.25*data1.shape[1]) #25%
+        stitch_search_range = int(0.5*data1.shape[1]) #50%
         lprint ('Rough shift search range is 0..%d' % (2*stitch_search_range))
         goodness1 = np.zeros ((2*stitch_search_range),dtype=np.float64)
         for i in range (0,stitch_search_range):
