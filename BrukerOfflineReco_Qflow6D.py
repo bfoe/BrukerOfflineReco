@@ -71,7 +71,7 @@ else: # running native python
    from scipy.ndimage import zoom 
    from scipy.ndimage import median_filter 
    from scipy.ndimage import gaussian_filter 
-   from scipy.ndimage import label    
+   from scipy.ndimage import label   
 pyfftw_installed = True
 try: 
     import pyfftw
@@ -358,6 +358,22 @@ if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a 
 try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,4,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]
+#check for acquisition error and possibly correct
+max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX)),FIDrawdata_CPX.shape)
+if max_idx[3]==0:
+    print ('WARNING: bad acquisition detected, maximum in dimension 3 is at position 0') 
+    print ('         trying to correct by removing respective data line')    
+    FIDrawdata_CPX [:,:,:,0] = 0
+    max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX)),FIDrawdata_CPX.shape)    
+if max_idx[2]==0:
+    print ('WARNING: bad acquisition detected, maximum in dimension 2 is at position 0') 
+    print ('         trying to correct by removing respective data line')    
+    FIDrawdata_CPX [:,:,0,:] = 0
+    max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX)),FIDrawdata_CPX.shape)
+if max_idx[0]==0:
+    print ('WARNING: bad acquisition detected, maximum in dimension 1 is at position 0') 
+    print ('         trying to correct by removing respective data line')
+    FIDrawdata_CPX [0,:,:,:] = 0
 
 # reshape reference
 if haveRef:
@@ -367,7 +383,23 @@ if haveRef:
     try: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF.reshape(dim0,4,dimRef[1],dimRef[2], order="F")
     except: print ('ERROR: reference k-space data reshape failed (dimension problem)'); sys.exit(1)
     if dim0 != dimRef[0]: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF[0:dimRef[0],:,:,:]
-
+    #check for acquisition error and possibly correct
+    max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX_REF)),FIDrawdata_CPX_REF.shape)
+    if max_idx[3]==0:
+        print ('WARNING: bad reference detected, maximum in dimension 3 is at position 0') 
+        print ('         trying to correct by removing respective data line')    
+        FIDrawdata_CPX_REF [:,:,:,0] = 0
+        max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX_REF)),FIDrawdata_CPX_REF.shape)    
+    if max_idx[2]==0:
+        print ('WARNING: bad reference detected, maximum in dimension 2 is at position 0') 
+        print ('         trying to correct by removing respective data line')    
+        FIDrawdata_CPX_REF [:,:,0,:] = 0
+        max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX_REF)),FIDrawdata_CPX_REF.shape)
+    if max_idx[0]==0:
+        print ('WARNING: bad reference detected, maximum in dimension 1 is at position 0') 
+        print ('         trying to correct by removing respective data line')
+        FIDrawdata_CPX_REF [0,:,:,:] = 0
+        
 #reorder data (main)
 FIDdata_tmp=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
@@ -601,6 +633,9 @@ if haveRef:
     
 #Phase correction 
 if haveRef: # using reference, this is what actually does the trick
+    #removed (not absolutely necessary)
+    mag_cor = 1
+    '''
     # 1) Magnitude correction (with veeeerrry heavy filtering to avoid SNR degradation)
     temp = np.abs(IMGdataRef)
     base = np.average(temp, axis=(1))
@@ -619,6 +654,7 @@ if haveRef: # using reference, this is what actually does the trick
     print('.', end='') #progress indicator
     mag_cor = zoom(mag_cor[:,:,:,:],[4,1,4,4],order=1) # upsample    
     print('.', end='') #progress indicator
+    '''   
     # 2) Phase Correction - complex division is equivalent to phase subtraction
     temp = IMGdata/IMGdataRef; 
     ph = np.angle(temp [:,:,:,:])
@@ -872,7 +908,8 @@ aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_decoded_ABS.shape[2]/2)*
 aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_decoded_ABS.shape[3]/2)*aff[2,2]
 #write Magnitude static
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,0,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_ABS/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Static.nii.gz'))
@@ -880,7 +917,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Magnitude flow
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_ABS[:,4,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_ABS/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT_Flow.nii.gz'))
@@ -888,7 +926,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow X
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,1,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(venc/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_X.nii.gz'))
@@ -896,7 +935,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow Y
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,2,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(venc/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_Y.nii.gz'))
@@ -904,7 +944,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow Z
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,3,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(venc/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow_Z.nii.gz'))
@@ -913,7 +954,8 @@ print('.', end='') #progress indicator
 print('.', end='') #progress indicator
 #write Phase flow ALL
 NIFTIimg = nib.Nifti1Image(IMGdata_decoded_PH[:,4,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(np.sqrt(3)*venc/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE_Flow.nii.gz'))
