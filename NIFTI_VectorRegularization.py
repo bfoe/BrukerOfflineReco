@@ -163,7 +163,9 @@ with open(os.path.join(new_dirname,logname), "w") as logfile:
     logfile.write(FIDfile2+'\n')
     logfile.write(FIDfile3+'\n')
 
-
+#get xyz_unit from nibabel test-read for usage in "quick fix" below
+img = nib.load(FIDfile1)
+xyzt_units  = img.header.get_xyzt_units()[0]
     
 # ------------------       ITK code starts here --------------------
 
@@ -178,6 +180,12 @@ SpatResol = np.zeros(shape=(3),dtype=np.float32)
 SpatResol[0] = itk_spacing[0]
 SpatResol[1] = itk_spacing[1]
 SpatResol[2] = itk_spacing[2]
+#quick fix
+if xyzt_units == "micron": 
+    SpatResol *= 1000.
+    image_X.SetSpacing(image_X.GetSpacing()*1000)
+    image_Y.SetSpacing(image_Y.GetSpacing()*1000)
+    image_Z.SetSpacing(image_Z.GetSpacing()*1000)
 #calc velocity over all voxels
 mag = np.sqrt(np.square(itk.GetArrayFromImage(image_X))+np.square(itk.GetArrayFromImage(image_Y))+np.square(itk.GetArrayFromImage(image_Z)))
 flow_sum_orig = np.sum(mag)
@@ -339,7 +347,8 @@ aff[1,1] = SpatResol[1]; aff[1,3] = -(Xcomponent_np.shape[1]/2)*aff[1,1]
 aff[2,2] = SpatResol[2]; aff[2,3] = -(Xcomponent_np.shape[2]/2)*aff[2,2]
 #write Phase flow X
 NIFTIimg = nib.Nifti1Image(Xcomponent_np[:,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_ALL/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(new_dirname,OutXfile))
@@ -347,7 +356,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow Y
 NIFTIimg = nib.Nifti1Image(Ycomponent_np[:,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_ALL/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(new_dirname,OutYfile))
@@ -355,7 +365,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow Z
 NIFTIimg = nib.Nifti1Image(Zcomponent_np[:,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_ALL/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(new_dirname,OutZfile))
@@ -363,7 +374,8 @@ except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 #write Phase flow Z
 NIFTIimg = nib.Nifti1Image(image_SOS[:,:,:], aff)
-NIFTIimg.header['sform_code']=1
+NIFTIimg.header.set_xyzt_units(3, 8)
+NIFTIimg.header['sform_code']=0
 NIFTIimg.header['qform_code']=1
 NIFTIimg.header.set_slope_inter(max_SOS/32767.,0)
 try: nib.save(NIFTIimg, os.path.join(new_dirname,Out_file))
