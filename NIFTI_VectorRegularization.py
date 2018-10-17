@@ -262,7 +262,8 @@ flow_directions = np.append (flow_directions,3)
 flowvol = np.zeros(arr.shape[flow_directions[0]], dtype=np.float32)
 for i in range(0,arr.shape[flow_directions[0]]): 
     flowvol[i] = np.sum(np.transpose(arr,flow_directions)[i,:,:,main_component])
-# prepare normalization    
+# prepare normalization
+flowvol = np.abs(flowvol)
 flowvol = smooth(flowvol,40)
 flowvol_normalize = np.zeros(flowvol.shape, dtype=np.float32)
 flowvol_normalize.fill (1.0)
