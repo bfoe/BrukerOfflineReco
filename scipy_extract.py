@@ -131,7 +131,7 @@ def _rank_filter(input, rank, size=None, footprint=None, output=None,
         return maximum_filter(input, None, footprint, output, mode, cval,
                               origins)
     else:
-        output, return_value = _get_output(output, input)
+        output = _get_output(output, input)
         mode = _extend_mode_to_code(mode)
         _nd_image.rank_filter(input, rank, footprint, output, mode, cval,
                               origins)
@@ -187,7 +187,7 @@ def correlate1d(input, weights, axis=-1, output=None, mode="reflect",
     input = numpy.asarray(input)
     if numpy.iscomplexobj(input):
         raise TypeError('Complex type not supported')
-    output, return_value = _get_output(output, input)
+    output = _get_output(output, input)
     weights = numpy.asarray(weights, dtype=numpy.float64)
     if weights.ndim != 1 or weights.shape[0] < 1:
         raise RuntimeError('no filter weights given')
@@ -210,7 +210,7 @@ def median_filter(input, size=None, footprint=None, output=None,
 def gaussian_filter(input, sigma, order=0, output=None,
       mode="reflect", cval=0.0, truncate=4.0):
     input = numpy.asarray(input)
-    output, return_value = _get_output(output, input)
+    output = _get_output(output, input)
     orders = _normalize_sequence(order, input.ndim)
     if not set(orders).issubset(set(range(4))):
         raise ValueError('Order outside 0..4 not implemented')
@@ -264,7 +264,7 @@ def zoom(input, zoom, output=None, order=3, mode='constant', cval=0.0,
                         out=numpy.ones_like(input.shape, dtype=numpy.float64),
                         where=zoom_div != 0)
 
-    output, return_value = _get_output(output, input,
+    output = _get_output(output, input,
                                                    shape=output_shape)
     zoom = numpy.ascontiguousarray(zoom)
     _nd_image.zoom_shift(filtered, zoom, None, output, order, mode, cval)
