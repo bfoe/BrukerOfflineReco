@@ -39,6 +39,7 @@ try: import win32gui, win32console
 except: pass #silent
 import numpy as np
 import sys
+import time
 import os
 import warnings
 import vtk
@@ -60,6 +61,14 @@ if not TK_installed:
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
 
+def redirect_vtk_messages ():
+    f = os.path.join(dirname,'VTK_errors.log')
+    log = vtk.vtkFileOutputWindow()
+    log.SetFlush(1)
+    log.SetFileName(f)
+    log.SetInstance(log)    
+    
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -93,7 +102,7 @@ except: pass #silent
 dirname  = os.path.dirname(InputFile)
 basename = os.path.basename(InputFile)
 basename = basename[0:basename.rfind('.stl')]
-    
+redirect_vtk_messages ()    
     
 # Load mesh from file.
 stlReader = vtk.vtkSTLReader()
@@ -108,7 +117,9 @@ decimate = 2.0
 new_npoints = long(npoints/decimate)
 print ('Remeshing with %d vertices' % new_npoints)
 cobj = Clustering.Cluster(mesh)
+time.sleep(5)
 cobj.GenClusters(new_npoints, subratio=20, verbose=True)
+time.sleep(5)
 warnings.filterwarnings("ignore") 
 cobj.GenMesh()
 
