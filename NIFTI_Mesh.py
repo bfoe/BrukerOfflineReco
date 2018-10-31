@@ -192,7 +192,7 @@ smooth.Update()
 writer = vtk.vtkSTLWriter()
 writer.SetInputConnection(smooth.GetOutputPort())
 writer.SetFileTypeToBinary()
-writer.SetFileName(basename+".stl")
+writer.SetFileName(os.path.join(dirname,basename+'.stl'))
 writer.Write()       
 
 
