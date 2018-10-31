@@ -46,7 +46,6 @@ import nibabel as nib
 import vtk
 from vtk.util import numpy_support
 
-
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
 except: 
@@ -63,23 +62,19 @@ if not TK_installed:
     print ('       http://www.activestate.com/activetcl/downloads')
     sys.exit(2)
 
-def ParseSingleValue(val):
-    try: # check if int
-        result = int(val)
-    except ValueError:
-        try: # then check if float
-            result = float(val)
-        except ValueError:
-            # if not, should  be string. Remove  newline character.
-            result = val.rstrip('\n')
-    return result    
-
-def smooth(x,window_len):
-    w=np.hanning(window_len)
-    s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
-    w=np.hanning(window_len)
-    y=np.convolve(w/w.sum(),s,mode='same')
-    return y[window_len:-window_len+1]  
+def redirect_vtk_messages ():
+    ow = vtk.vtkOutputWindow()
+    ow.SendToStdErrOn()
+    #1
+    #errOut = vtk.vtkFileOutputWindow()
+    #errOut.SetFileName(os.path.join(dirname,'VTK_errors.log')
+    #vtkStdErrOut = vtk.vtkOutputWindow()
+    #vtkStdErrOut.SetInstance(errOut)
+    #2
+    #log = vtk.vtkFileOutputWindow()
+    #log.SetFlush(1)
+    #log.SetFileName(os.path.join(dirname,'VTK_errors.log'))
+    #log.SetInstance(log)         
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -116,9 +111,7 @@ basename = os.path.basename(InputFile)
 basename = basename[0:basename.rfind('.nii.gz')]
 
 
-
 print ('Reading NIFTI file')
-
 img = nib.load(InputFile)
 data = img.get_data().astype(np.float32)
 shape = data.shape
@@ -134,6 +127,7 @@ data = data/np.amax(data)
 if np.unique(data).shape[0]!=2: print ('ERROR: Inputfile is not binary (containes values != 0,1)'); sys.exit(2)   
 
 # --------- VTK code starts here --------
+redirect_vtk_messages ()
 
 # convert numpy array to VTK image algorithm output
 warnings.filterwarnings("ignore")
@@ -154,6 +148,7 @@ cast.Update()
 
 print ('Creating Mesh')
 close_filter = vtk.vtkImageOpenClose3D()
+#close_filter.SetInputConnection(reader.GetOutputPort())
 close_filter.SetInputConnection(cast.GetOutputPort())
 close_filter.SetOpenValue(0)
 close_filter.SetCloseValue(1)

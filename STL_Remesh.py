@@ -61,11 +61,18 @@ if not TK_installed:
     sys.exit(2)
 
 def redirect_vtk_messages ():
-    f = os.path.join(dirname,'VTK_errors.log')
-    log = vtk.vtkFileOutputWindow()
-    log.SetFlush(1)
-    log.SetFileName(f)
-    log.SetInstance(log)    
+    ow = vtk.vtkOutputWindow()
+    ow.SendToStdErrOn()
+    #1
+    #errOut = vtk.vtkFileOutputWindow()
+    #errOut.SetFileName(os.path.join(dirname,'VTK_errors.log')
+    #vtkStdErrOut = vtk.vtkOutputWindow()
+    #vtkStdErrOut.SetInstance(errOut)
+    #2
+    #log = vtk.vtkFileOutputWindow()
+    #log.SetFlush(1)
+    #log.SetFileName(os.path.join(dirname,'VTK_errors.log'))
+    #log.SetInstance(log)    
     
     
 #general initialization stuff  
