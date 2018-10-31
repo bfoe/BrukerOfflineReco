@@ -39,7 +39,6 @@ try: import win32gui, win32console
 except: pass #silent
 import numpy as np
 import sys
-import time
 import os
 import warnings
 import vtk
@@ -117,9 +116,7 @@ decimate = 2.0
 new_npoints = long(npoints/decimate)
 print ('Remeshing with %d vertices' % new_npoints)
 cobj = Clustering.Cluster(mesh)
-time.sleep(5)
 cobj.GenClusters(new_npoints, subratio=20, verbose=True)
-time.sleep(5)
 warnings.filterwarnings("ignore") 
 cobj.GenMesh()
 
