@@ -141,7 +141,7 @@ del u; del numpy_data; del vtk_data # free memory
 
 #get current resolution and set interpolation factor
 spacing  = tofloat.GetOutput().GetSpacing()
-interpolation = 1.6 # better would b 2.0 but, but takes too much memory
+interpolation = 1.5 # better would b 2.0 but, but takes too much memory
 spacingX = spacing[0]/interpolation
 spacingY = spacing[1]/interpolation 
 spacingZ = spacing[2]/interpolation
