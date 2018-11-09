@@ -124,11 +124,22 @@ reader = vtk.vtkNIFTIImageReader()
 reader.SetFileName(InputFile)
 reader.Update()
 
+#closing filter
+print ('Apllying closing filter')
+close_filter = vtk.vtkImageOpenClose3D()
+close_filter.SetInputConnection(reader.GetOutputPort())
+close_filter.SetOpenValue(0)
+close_filter.SetCloseValue(1)
+close_filter.SetKernelSize(3,3,3)
+close_filter.Update()
+del reader # free memory
+
 #convert to float
 tofloat = vtk.vtkImageCast()
-tofloat.SetInputConnection(reader.GetOutputPort())
+tofloat.SetInputConnection(close_filter.GetOutputPort())
 tofloat.SetOutputScalarTypeToFloat()
 tofloat.Update()
+del close_filter # free memory
 
 #check binary
 vtk_data = tofloat.GetOutput().GetPointData().GetScalars()
@@ -141,7 +152,7 @@ del u; del numpy_data; del vtk_data # free memory
 
 #get current resolution and set interpolation factor
 spacing  = tofloat.GetOutput().GetSpacing()
-interpolation = 2.0
+interpolation = 1.6
 spacingX = spacing[0]/interpolation
 spacingY = spacing[1]/interpolation 
 spacingZ = spacing[2]/interpolation
@@ -181,31 +192,15 @@ thresh.SetOutputScalarTypeToShort()
 thresh.Update()
 del normalize # free memory
 
-#convert to short
-toshort = vtk.vtkImageCast()
-toshort.SetInputConnection(thresh.GetOutputPort())
-toshort.SetOutputScalarTypeToShort()
-toshort.Update()
-del thresh # free memory
-
-print ('Apllying closing filter')
-close_filter = vtk.vtkImageOpenClose3D()
-close_filter.SetInputConnection(toshort.GetOutputPort())
-close_filter.SetOpenValue(0)
-close_filter.SetCloseValue(1)
-close_filter.SetKernelSize(7,7,7)
-close_filter.Update()
-del toshort # free memory
-
 print ('Creating Mesh    ',end='')
 mesh = vtk.vtkDiscreteMarchingCubes()
-mesh.SetInputConnection(close_filter.GetOutputPort())
+mesh.SetInputConnection(thresh.GetOutputPort())
 mesh.GenerateValues(1, 1, 1)
 mesh.Update()
 ncells = mesh.GetOutput().GetNumberOfCells()
 if ncells>0: print(" --> Found %d cells" % ncells)
 else: print("\nERROR: zero cells in mesh"); sys.exit(1)
-del close_filter # free memory
+del thresh # free memory
 
 print ('Removing isolated',end='')
 conn = vtk.vtkPolyDataConnectivityFilter()
@@ -220,7 +215,7 @@ del mesh # free memory
 smooth1 = vtk.vtkSmoothPolyDataFilter()
 smooth1.SetInputConnection(conn.GetOutputPort())
 smooth1.SetNumberOfIterations(7)
-smooth1.SetRelaxationFactor(0.15)
+smooth1.SetRelaxationFactor(0.2)
 smooth1.FeatureEdgeSmoothingOff()
 smooth1.BoundarySmoothingOff()
 smooth1.Update()
@@ -240,7 +235,7 @@ del smooth1 # free memory
 smooth2 = vtk.vtkSmoothPolyDataFilter()
 smooth2.SetInputConnection(decimate.GetOutputPort())
 smooth2.SetNumberOfIterations(7)
-smooth2.SetRelaxationFactor(0.15)
+smooth2.SetRelaxationFactor(0.2)
 smooth2.FeatureEdgeSmoothingOff()
 smooth2.BoundarySmoothingOff()
 smooth2.Update()
@@ -251,8 +246,35 @@ writer.SetInputConnection(smooth2.GetOutputPort())
 writer.SetFileTypeToBinary()
 writer.SetFileName(os.path.join(dirname,basename+'.stl'))
 writer.Write()       
-del smooth2 # free memory
 del writer  # free memory
+
+print ('Decimating mesh  ',end='')
+decimate2 = vtk.vtkQuadricDecimation()
+decimate2.SetInputConnection(smooth2.GetOutputPort())
+decimate2.SetTargetReduction(0.5)
+decimate2.Update()
+ncells = decimate2.GetOutput().GetNumberOfCells()
+if ncells>0: print(" --> Remaining %d cells" % ncells)
+else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+del smooth2 # free memory
+
+smooth3 = vtk.vtkSmoothPolyDataFilter()
+smooth3.SetInputConnection(decimate2.GetOutputPort())
+smooth3.SetNumberOfIterations(7)
+smooth3.SetRelaxationFactor(0.2)
+smooth3.FeatureEdgeSmoothingOff()
+smooth3.BoundarySmoothingOff()
+smooth3.Update()
+del decimate2 # free memory
+
+writer = vtk.vtkSTLWriter()
+writer.SetInputConnection(smooth3.GetOutputPort())
+writer.SetFileTypeToBinary()
+writer.SetFileName(os.path.join(dirname,basename+'_LowRes.stl'))
+writer.Write()       
+del smooth3 # free memory
+del writer  # free memory
+
 
 if sys.platform=="win32": os.system("pause") # windows
 else: 
