@@ -124,6 +124,15 @@ reader = vtk.vtkNIFTIImageReader()
 reader.SetFileName(InputFile)
 reader.Update()
 
+#check binary
+vtk_data = reader.GetOutput().GetPointData().GetScalars()
+numpy_data = numpy_support.vtk_to_numpy(vtk_data)
+u = np.unique(numpy_data).shape[0]
+if u!=2: 
+   print ('ERROR: Inputfile is not binary')
+   sys.exit(2)
+del u; del numpy_data; del vtk_data # free memory
+
 #closing filter
 print ('Apllying closing filter')
 close_filter = vtk.vtkImageOpenClose3D()
@@ -141,18 +150,17 @@ tofloat.SetOutputScalarTypeToFloat()
 tofloat.Update()
 del close_filter # free memory
 
-#check binary
-vtk_data = tofloat.GetOutput().GetPointData().GetScalars()
-numpy_data = numpy_support.vtk_to_numpy(vtk_data)
-u = np.unique(numpy_data).shape[0]
-if u!=2: 
-   print ('ERROR: Inputfile is not binary')
-   sys.exit(2)
-del u; del numpy_data; del vtk_data # free memory
+#normalize to 1
+normalize = vtk.vtkImageMathematics()
+normalize.SetInputConnection(tofloat.GetOutputPort())
+normalize.SetOperationToMultiplyByK()
+normalize.SetConstantK(1./tofloat.GetOutput().GetScalarRange()[1])
+normalize.Update()
+del tofloat # free memory
 
 #get current resolution and set interpolation factor
-spacing  = tofloat.GetOutput().GetSpacing()
-interpolation = 1.6
+spacing  = normalize.GetOutput().GetSpacing()
+interpolation = 1.5
 spacingX = spacing[0]/interpolation
 spacingY = spacing[1]/interpolation 
 spacingZ = spacing[2]/interpolation
@@ -163,9 +171,9 @@ interp.SetWindowFunctionToLanczos()
 resize = vtk.vtkImageReslice()
 resize.SetOutputSpacing((spacingX, spacingY, spacingZ))
 resize.SetInterpolator(interp)
-resize.SetInputConnection(tofloat.GetOutputPort())
+resize.SetInputConnection(normalize.GetOutputPort())
 resize.Update()
-del tofloat # free memory
+del normalize # free memory
 
 print ('Smoothing image')
 imagesmooth = vtk.vtkImageGaussianSmooth()
@@ -174,23 +182,15 @@ imagesmooth.SetRadiusFactors(1.2,1.2,1.2) # very light smoothing
 imagesmooth.Update()
 del resize # free memory
 
-#normalize to 1
-normalize = vtk.vtkImageMathematics()
-normalize.SetInputConnection(imagesmooth.GetOutputPort())
-normalize.SetOperationToMultiplyByK()
-normalize.SetConstantK(1./imagesmooth.GetOutput().GetScalarRange()[1])
-normalize.Update()
-del imagesmooth # free memory
-
 print ('Thresholding image')
 thresh = vtk.vtkImageThreshold()
-thresh.SetInputConnection(normalize.GetOutputPort())
+thresh.SetInputConnection(imagesmooth.GetOutputPort())
 thresh.ThresholdByUpper(0.45) # 0.5 theoreticaly
 thresh.SetInValue(1)
 thresh.SetOutValue(0)
 thresh.SetOutputScalarTypeToShort()
 thresh.Update()
-del normalize # free memory
+del imagesmooth # free memory
 
 print ('Creating Mesh    ',end='')
 mesh = vtk.vtkDiscreteMarchingCubes()
