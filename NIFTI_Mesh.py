@@ -130,27 +130,21 @@ tofloat.SetInputConnection(reader.GetOutputPort())
 tofloat.SetOutputScalarTypeToFloat()
 tofloat.Update()
 
-#normalize to 1
-normalize = vtk.vtkImageMathematics()
-normalize.SetInputConnection(reader.GetOutputPort())
-normalize.SetOperationToMultiplyByK()
-normalize.SetConstantK(1./tofloat.GetOutput().GetScalarRange()[1])
-normalize.Update()   
-
 #check binary
-vtk_data = normalize.GetOutput().GetPointData().GetScalars()
+vtk_data = tofloat.GetOutput().GetPointData().GetScalars()
 numpy_data = numpy_support.vtk_to_numpy(vtk_data)
-u = np.unique (numpy_data)
-if u[0]!=0.0 or u[1]!=1.0: 
-   print ('ERROR: Inputfile is not binary (containes values != 0,1)')
+u = np.unique(numpy_data).shape[0]
+if u!=2: 
+   print ('ERROR: Inputfile is not binary')
    sys.exit(2)
 del u; del numpy_data; del vtk_data # free memory
 
-#get current resolution
-spacing  = normalize.GetOutput().GetSpacing()
-spacingX = spacing[0]/2.
-spacingY = spacing[1]/2. 
-spacingZ = spacing[2]/2.
+#get current resolution and set interpolation factor
+spacing  = tofloat.GetOutput().GetSpacing()
+interpolation = 1.6 # better would b 2.0 but, but takes too much memory
+spacingX = spacing[0]/interpolation
+spacingY = spacing[1]/interpolation 
+spacingZ = spacing[2]/interpolation
 
 print ('Interpolating image')
 interp = vtk.vtkImageSincInterpolator()
@@ -160,29 +154,48 @@ resize.SetOutputSpacing((spacingX, spacingY, spacingZ))
 resize.SetInterpolator(interp)
 resize.SetInputConnection(tofloat.GetOutputPort())
 resize.Update()
+del tofloat # free memory
 
 print ('Smoothing image')
 imagesmooth = vtk.vtkImageGaussianSmooth()
 imagesmooth.SetInputConnection(resize.GetOutputPort())
 imagesmooth.SetRadiusFactors(1.2,1.2,1.2) # very light smoothing
 imagesmooth.Update()
+del resize # free memory
+
+#normalize to 1
+normalize = vtk.vtkImageMathematics()
+normalize.SetInputConnection(imagesmooth.GetOutputPort())
+normalize.SetOperationToMultiplyByK()
+normalize.SetConstantK(1./imagesmooth.GetOutput().GetScalarRange()[1])
+normalize.Update()
+del imagesmooth # free memory
 
 print ('Thresholding image')
 thresh = vtk.vtkImageThreshold()
-thresh.SetInputConnection(imagesmooth.GetOutputPort())
+thresh.SetInputConnection(normalize.GetOutputPort())
 thresh.ThresholdByUpper(0.45) # 0.5 theoreticaly
 thresh.SetInValue(1)
 thresh.SetOutValue(0)
 thresh.SetOutputScalarTypeToShort()
 thresh.Update()
+del normalize # free memory
+
+#convert to short
+toshort = vtk.vtkImageCast()
+toshort.SetInputConnection(thresh.GetOutputPort())
+toshort.SetOutputScalarTypeToShort()
+toshort.Update()
+del thresh # free memory
 
 print ('Apllying closing filter')
 close_filter = vtk.vtkImageOpenClose3D()
-close_filter.SetInputConnection(thresh.GetOutputPort())
+close_filter.SetInputConnection(toshort.GetOutputPort())
 close_filter.SetOpenValue(0)
 close_filter.SetCloseValue(1)
 close_filter.SetKernelSize(7,7,7)
 close_filter.Update()
+del toshort # free memory
 
 print ('Creating Mesh    ',end='')
 mesh = vtk.vtkDiscreteMarchingCubes()
@@ -192,6 +205,7 @@ mesh.Update()
 ncells = mesh.GetOutput().GetNumberOfCells()
 if ncells>0: print(" --> Found %d cells" % ncells)
 else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+del close_filter # free memory
 
 print ('Removing isolated',end='')
 conn = vtk.vtkPolyDataConnectivityFilter()
@@ -201,6 +215,7 @@ conn.Update()
 ncells = conn.GetOutput().GetNumberOfCells()
 if ncells>0: print(" --> Remaining %d cells" % ncells)
 else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+del mesh # free memory
 
 smooth1 = vtk.vtkSmoothPolyDataFilter()
 smooth1.SetInputConnection(conn.GetOutputPort())
@@ -209,15 +224,18 @@ smooth1.SetRelaxationFactor(0.2)
 smooth1.FeatureEdgeSmoothingOff()
 smooth1.BoundarySmoothingOff()
 smooth1.Update()
+del conn # free memory
 
 print ('Decimating mesh  ',end='')
+reduction = 1.-1./interpolation
 decimate = vtk.vtkQuadricDecimation()
 decimate.SetInputConnection(smooth1.GetOutputPort())
-decimate.SetTargetReduction(.5)
+decimate.SetTargetReduction(reduction)
 decimate.Update()
 ncells = decimate.GetOutput().GetNumberOfCells()
 if ncells>0: print(" --> Remaining %d cells" % ncells)
 else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+del smooth1 # free memory
 
 smooth2 = vtk.vtkSmoothPolyDataFilter()
 smooth2.SetInputConnection(decimate.GetOutputPort())
@@ -226,14 +244,15 @@ smooth2.SetRelaxationFactor(0.2)
 smooth2.FeatureEdgeSmoothingOff()
 smooth2.BoundarySmoothingOff()
 smooth2.Update()
+del decimate # free memory
 
 writer = vtk.vtkSTLWriter()
 writer.SetInputConnection(smooth2.GetOutputPort())
 writer.SetFileTypeToBinary()
 writer.SetFileName(os.path.join(dirname,basename+'.stl'))
 writer.Write()       
-
-
+del smooth2 # free memory
+del writer  # free memory
 
 if sys.platform=="win32": os.system("pause") # windows
 else: 
