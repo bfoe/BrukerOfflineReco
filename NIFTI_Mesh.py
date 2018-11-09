@@ -141,7 +141,7 @@ del u; del numpy_data; del vtk_data # free memory
 
 #get current resolution and set interpolation factor
 spacing  = tofloat.GetOutput().GetSpacing()
-interpolation = 1.5 # better would b 2.0 but, but takes too much memory
+interpolation = 2.0
 spacingX = spacing[0]/interpolation
 spacingY = spacing[1]/interpolation 
 spacingZ = spacing[2]/interpolation
@@ -220,7 +220,7 @@ del mesh # free memory
 smooth1 = vtk.vtkSmoothPolyDataFilter()
 smooth1.SetInputConnection(conn.GetOutputPort())
 smooth1.SetNumberOfIterations(7)
-smooth1.SetRelaxationFactor(0.2)
+smooth1.SetRelaxationFactor(0.15)
 smooth1.FeatureEdgeSmoothingOff()
 smooth1.BoundarySmoothingOff()
 smooth1.Update()
@@ -240,7 +240,7 @@ del smooth1 # free memory
 smooth2 = vtk.vtkSmoothPolyDataFilter()
 smooth2.SetInputConnection(decimate.GetOutputPort())
 smooth2.SetNumberOfIterations(7)
-smooth2.SetRelaxationFactor(0.2)
+smooth2.SetRelaxationFactor(0.15)
 smooth2.FeatureEdgeSmoothingOff()
 smooth2.BoundarySmoothingOff()
 smooth2.Update()
