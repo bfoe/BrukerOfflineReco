@@ -106,9 +106,12 @@ print ('Found %d faces    ' % faces.shape[0])
 p1=int(vertices.shape[0]/20) # for progress indicator
 p2=int(faces.shape[0]/20)    # for progress indicator
 vertices /= 1000. # rescale um to mm
-xmin=np.amin(vertices[:,0])*1.1; xmax=np.amax(vertices[:,0])*1.1
-ymin=np.amin(vertices[:,1])*1.1; ymax=np.amax(vertices[:,1])*1.1
-zmin=np.amin(vertices[:,2])*1.1; zmax=np.amax(vertices[:,2])*1.1
+xmin=np.amin(vertices[:,0]); xmax=np.amax(vertices[:,0])
+ymin=np.amin(vertices[:,1]); ymax=np.amax(vertices[:,1])
+zmin=np.amin(vertices[:,2]); zmax=np.amax(vertices[:,2])
+xmin -= 0.1*abs(xmin); xmax += 0.1*abs(xmax)
+ymin -= 0.1*abs(ymin); ymax += 0.1*abs(ymax)
+zmin -= 0.1*abs(zmin); xmax += 0.1*abs(zmax)
 if max(abs(xmin),abs(xmax))>400: print ('ERROR: extension in X direction exceed maximum');sys.exit(2)
 if max(abs(ymin),abs(ymax))>400: print ('ERROR: extension in Y direction exceed maximum');sys.exit(2)
 if max(abs(zmin),abs(zmax))>400: print ('ERROR: extension in Z direction exceed maximum');sys.exit(2)

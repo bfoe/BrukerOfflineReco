@@ -30,7 +30,6 @@
 #    This program was developed under Python Version 2.7
 #    with the following additional libraries: 
 #    - numpy
-#    - nibabel
 #    - vtk
 #
 
@@ -42,9 +41,9 @@ import sys
 import os
 import warnings
 import numpy as np
-import nibabel as nib
 import vtk
 from vtk.util import numpy_support
+import multiprocessing as mp
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -109,86 +108,131 @@ except: pass #silent
 dirname  = os.path.dirname(InputFile)
 basename = os.path.basename(InputFile)
 basename = basename[0:basename.rfind('.nii.gz')]
-
-
-print ('Reading NIFTI file')
-img = nib.load(InputFile)
-data = img.get_data().astype(np.float32)
-shape = data.shape
-affine = img.affine
-Origin = np.asarray((affine[0,3],affine[1,3],affine[2,3]))
-SpatResol = np.asarray(img.header.get_zooms())
-
-# convert to VTK order
-data = np.transpose (data, [2,1,0]).copy() 
-
-#check if binarized
-data = data/np.amax(data)
-if np.unique(data).shape[0]!=2: print ('ERROR: Inputfile is not binary (containes values != 0,1)'); sys.exit(2)   
+   
 
 # --------- VTK code starts here --------
 redirect_vtk_messages ()
 
-# convert numpy array to VTK image algorithm output
-warnings.filterwarnings("ignore")
-VTK_data = numpy_support.numpy_to_vtk(num_array=data.flatten(), deep=True, array_type=vtk.VTK_INT)
-img_vtk = vtk.vtkImageData()
-img_vtk.SetDimensions(shape)
-img_vtk.SetSpacing(SpatResol)
-img_vtk.SetOrigin(Origin)
-img_vtk.GetPointData().SetScalars(VTK_data)
-cast = vtk.vtkImageCast ()
-cast.SetInputData(img_vtk)
-cast.Update()
+#set number of cores   
+cores=mp.cpu_count()-1; cores = max (1,cores)
+print ('Vtk multithreading set to %d cores ' % cores)   
+vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(cores)
 
 #VTK read NIFTI
-#reader = vtk.vtkNIFTIImageReader()
-#reader.SetFileName(InputFile)
-#reader.Update()
+print ('Reading NIFTI image')
+reader = vtk.vtkNIFTIImageReader()
+reader.SetFileName(InputFile)
+reader.Update()
 
-print ('Creating Mesh')
+#convert to float
+tofloat = vtk.vtkImageCast()
+tofloat.SetInputConnection(reader.GetOutputPort())
+tofloat.SetOutputScalarTypeToFloat()
+tofloat.Update()
+
+#normalize to 1
+normalize = vtk.vtkImageMathematics()
+normalize.SetInputConnection(reader.GetOutputPort())
+normalize.SetOperationToMultiplyByK()
+normalize.SetConstantK(1./tofloat.GetOutput().GetScalarRange()[1])
+normalize.Update()   
+
+#check binary
+vtk_data = normalize.GetOutput().GetPointData().GetScalars()
+numpy_data = numpy_support.vtk_to_numpy(vtk_data)
+u = np.unique (numpy_data)
+if u[0]!=0.0 or u[1]!=1.0: 
+   print ('ERROR: Inputfile is not binary (containes values != 0,1)')
+   sys.exit(2)
+del u; del numpy_data; del vtk_data # free memory
+
+#get current resolution
+spacing  = normalize.GetOutput().GetSpacing()
+spacingX = spacing[0]/2.
+spacingY = spacing[1]/2. 
+spacingZ = spacing[2]/2.
+
+print ('Interpolating image')
+interp = vtk.vtkImageSincInterpolator()
+interp.SetWindowFunctionToLanczos()
+resize = vtk.vtkImageReslice()
+resize.SetOutputSpacing((spacingX, spacingY, spacingZ))
+resize.SetInterpolator(interp)
+resize.SetInputConnection(tofloat.GetOutputPort())
+resize.Update()
+
+print ('Smoothing image')
+imagesmooth = vtk.vtkImageGaussianSmooth()
+imagesmooth.SetInputConnection(resize.GetOutputPort())
+imagesmooth.SetRadiusFactors(1.2,1.2,1.2) # very light smoothing
+imagesmooth.Update()
+
+print ('Thresholding image')
+thresh = vtk.vtkImageThreshold()
+thresh.SetInputConnection(imagesmooth.GetOutputPort())
+thresh.ThresholdByUpper(0.45) # 0.5 theoreticaly
+thresh.SetInValue(1)
+thresh.SetOutValue(0)
+thresh.SetOutputScalarTypeToShort()
+thresh.Update()
+
+print ('Apllying closing filter')
 close_filter = vtk.vtkImageOpenClose3D()
-#close_filter.SetInputConnection(reader.GetOutputPort())
-close_filter.SetInputConnection(cast.GetOutputPort())
+close_filter.SetInputConnection(thresh.GetOutputPort())
 close_filter.SetOpenValue(0)
 close_filter.SetCloseValue(1)
-close_filter.SetKernelSize(3,3,3)
+close_filter.SetKernelSize(7,7,7)
 close_filter.Update()
 
+print ('Creating Mesh    ',end='')
 mesh = vtk.vtkDiscreteMarchingCubes()
 mesh.SetInputConnection(close_filter.GetOutputPort())
 mesh.GenerateValues(1, 1, 1)
 mesh.Update()
+ncells = mesh.GetOutput().GetNumberOfCells()
+if ncells>0: print(" --> Found %d cells" % ncells)
+else: print("\nERROR: zero cells in mesh"); sys.exit(1)
 
-#only largest connected
+print ('Removing isolated',end='')
 conn = vtk.vtkPolyDataConnectivityFilter()
 conn.SetInputConnection(mesh.GetOutputPort())
 conn.SetExtractionModeToLargestRegion()
 conn.Update()
+ncells = conn.GetOutput().GetNumberOfCells()
+if ncells>0: print(" --> Remaining %d cells" % ncells)
+else: print("\nERROR: zero cells in mesh"); sys.exit(1)
 
-#smooth
-smooth = vtk.vtkSmoothPolyDataFilter()
-smooth.SetInputConnection(conn.GetOutputPort())
-smooth.SetNumberOfIterations(2)
-smooth.SetRelaxationFactor(0.5)
-smooth.FeatureEdgeSmoothingOff()
-smooth.BoundarySmoothingOff()
-normals = vtk.vtkPolyDataNormals()
-normals.SetInputConnection(smooth.GetOutputPort())
-normals.FlipNormalsOn()
-mapper = vtk.vtkPolyDataMapper()
-mapper.SetInputConnection(normals.GetOutputPort())
-actor = vtk.vtkActor()
-actor.SetMapper(mapper)
-actor.GetProperty().SetInterpolationToFlat()
-smooth.Update()
+smooth1 = vtk.vtkSmoothPolyDataFilter()
+smooth1.SetInputConnection(conn.GetOutputPort())
+smooth1.SetNumberOfIterations(7)
+smooth1.SetRelaxationFactor(0.2)
+smooth1.FeatureEdgeSmoothingOff()
+smooth1.BoundarySmoothingOff()
+smooth1.Update()
 
-#write STL
+print ('Decimating mesh  ',end='')
+decimate = vtk.vtkQuadricDecimation()
+decimate.SetInputConnection(smooth1.GetOutputPort())
+decimate.SetTargetReduction(.5)
+decimate.Update()
+ncells = decimate.GetOutput().GetNumberOfCells()
+if ncells>0: print(" --> Remaining %d cells" % ncells)
+else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+
+smooth2 = vtk.vtkSmoothPolyDataFilter()
+smooth2.SetInputConnection(decimate.GetOutputPort())
+smooth2.SetNumberOfIterations(7)
+smooth2.SetRelaxationFactor(0.2)
+smooth2.FeatureEdgeSmoothingOff()
+smooth2.BoundarySmoothingOff()
+smooth2.Update()
+
 writer = vtk.vtkSTLWriter()
-writer.SetInputConnection(smooth.GetOutputPort())
+writer.SetInputConnection(smooth2.GetOutputPort())
 writer.SetFileTypeToBinary()
 writer.SetFileName(os.path.join(dirname,basename+'.stl'))
 writer.Write()       
+
 
 
 if sys.platform=="win32": os.system("pause") # windows
