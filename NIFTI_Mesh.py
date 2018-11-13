@@ -99,7 +99,7 @@ except: pass
 TKwindows.update()
     
 #intercatively choose input NIFTI file
-InputFile = askopenfilename(title="Choose (masked) NIFTI file", filetypes=[("NIFTI files",('.nii.gz'))])
+InputFile = askopenfilename(title="Choose (masked) NIFTI file", filetypes=[("NIFTI files",('.nii.gz','.nii'))])
 if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
 InputFile = os.path.abspath(InputFile)
 TKwindows.update()
