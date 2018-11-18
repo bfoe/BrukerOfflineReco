@@ -5,10 +5,10 @@
 #        1.0,-1.0,-1.0, 1.5
 #       -1.0, 1.0,-1.0, 1.5
 #       -1.0,-1.0, 1.0, 1.5
-# the first three columns are the X,Y,Z components of the spheres origin
-# the last column containes the radius of the sphere
+# the first three columns are the X,Y,Z components of the sphere's origin
+# the last column contains the radius of the sphere
 # the file should be named <something>.sphrs
-# output mesh is written PLY format
+# output mesh is written STL format
 #      
 #
 # ----- VERSION HISTORY -----
