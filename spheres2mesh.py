@@ -26,8 +26,7 @@
 #    This program was developed under Python Version 2.7
 #    with the following additional libraries: 
 #    - numpy
-#    - vtk
-#    - open3d 
+#    - vtk 
 #    - numexpr (optional, speeds up some things)
 #    - SSDRecon.exe executable from
 #      http://www.cs.jhu.edu/~misha/Code/PoissonRecon/Version10.04/
@@ -44,7 +43,6 @@ import subprocess
 import vtk
 from vtk.util import numpy_support
 import multiprocessing as mp
-import open3d 
 
 numexpr_installed = True
 try: import numexpr as ne
@@ -267,12 +265,26 @@ if allpoints.shape!=allnormals.shape:
     print ('Error: Soething went wrong badly while calculation point normals')
     sys.exit(1)
 
-#save point cloud using open3d
-pcd = open3d.PointCloud()
-pcd.points = open3d.Vector3dVector(allpoints)
-pcd.normals = open3d.Vector3dVector(allnormals)
+#save point cloud
 pointcloud_file=os.path.join(dirname,basename+'_pointcloud.ply')
-open3d.write_point_cloud(pointcloud_file, pcd)
+f = open(pointcloud_file,"w") 
+f.write ("ply\n")
+f.write ("format ascii 1.0\n")
+f.write ("comment homebrew generated\n")
+f.write ("element vertex %d\n" % allpoints.shape[0])
+f.write ("property float x\n")
+f.write ("property float y\n")
+f.write ("property float z\n")
+f.write ("property float nx\n")
+f.write ("property float ny\n")
+f.write ("property float nz\n")
+f.write ("element face 0\n")
+f.write ("property list uchar int vertex_indices\n")
+f.write ("end_header\n")
+for k in range (allpoints.shape[0]):
+    f.write ("%f %f %f %f %f %f\n" % (allpoints[k,0],allpoints[k,1],allpoints[k,2],
+                                allnormals[k,0],allnormals[k,1],allnormals[k,2]))                             
+f.close()
 
 #run SSDRecon.exe
 print ('Reconstructing surface mesh with SSDRecon') 
