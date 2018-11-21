@@ -167,7 +167,22 @@ def sphere(params): #input [X,Y,Z,Radius] #output mesh
     scaled.SetInputConnection(subdivide.GetOutputPort())
     scaled.SetTransform(scale_transform)
     scaled.Update()
-    return scaled.GetOutput()    
+    #ncells = scaled.GetOutput().GetNumberOfCells();
+    #print(ncells)
+    return scaled.GetOutput()
+    '''
+    # simple solution with vtkSphereSource
+    resolution = 15+int(math.ceil(params[3]/min_radius))#**1.0)
+    source = vtk.vtkSphereSource()
+    source.SetCenter(params[0],params[1],params[2])
+    source.SetRadius(params[3])
+    source.SetThetaResolution (resolution)
+    source.SetPhiResolution (resolution)
+    source.Update()
+    #ncells = source.GetOutput().GetNumberOfCells();
+    #print(ncells)
+    return source.GetOutput()
+    '''
 
 #create mesh from spheres
 print ('Creating mesh ',end='')
