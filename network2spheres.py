@@ -126,9 +126,10 @@ if __name__ == '__main__':
     empty_keys = [k for k,v in nodes.iteritems() if not v]
     for k in empty_keys: del nodes[k]
 
+    cores_act=min(cores,len(nodes)) # just in case (don't allocate unnecessary cores)
     print ('Multithreading set to %d cores ' % cores)   
     print ('Extracting nodes ',end='')
-    p = mp.Pool(cores)
+    p = mp.Pool(cores_act)
     return_vals=[]    
     prog_dec = int(len(nodes)/60)+1    
     for i in range(cores):
