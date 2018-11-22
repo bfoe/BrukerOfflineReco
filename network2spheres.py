@@ -127,13 +127,13 @@ if __name__ == '__main__':
     for k in empty_keys: del nodes[k]
 
     cores_act=min(cores,len(nodes)) # just in case (don't allocate unnecessary cores)
-    print ('Multithreading set to %d cores ' % cores)   
+    print ('Multithreading set to %d cores ' % cores_act)   
     print ('Extracting nodes ',end='')
     p = mp.Pool(cores_act)
     return_vals=[]    
     prog_dec = int(len(nodes)/60)+1    
-    for i in range(cores):
-        workpiece=int(math.ceil(float(len(nodes))/float(cores)))
+    for i in range(cores_act):
+        workpiece=int(math.ceil(float(len(nodes))/float(cores_act)))
         start = i*workpiece
         end   = start+workpiece
         if end > len(nodes): end = len(nodes)       
@@ -141,7 +141,7 @@ if __name__ == '__main__':
     p.close()
     p.join()
     data = np.zeros((0,4),dtype=int)
-    for i in range(0,cores):
+    for i in range(0,cores_act):
         data = np.concatenate ((data, return_vals[i].get()), axis=0) # return values
 
     print ('\nComputing sqrt(r)')

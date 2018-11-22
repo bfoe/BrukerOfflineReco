@@ -81,68 +81,10 @@ def run (command):
         print (command)   
         print (stderr)
         print (stdout)
-
-#general initialization stuff  
-space=' '; slash='/'; 
-if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
-Program_name = os.path.basename(sys.argv[0]); 
-if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
-try: resourcedir = sys._MEIPASS+slash # when on PyInstaller 
-except: resourcedir = os.path.abspath(os.path.dirname(sys.argv[0]))+slash; 
-python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
-# sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
-if sys.platform=="win32": os.system("title "+Program_name)
-#check for external executables
-if not os.path.isfile(os.path.join(resourcedir,'SSDRecon.exe')):
-    print ('ERROR:  SSDRecon executable not found '); sys.exit(1)
-    
-#TK initialization       
-TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
-TKwindows.update()
-# the following tries to disable showing hidden files/folders under linux
-try: TKwindows.tk.call('tk_getOpenFile', '-foobarz')
-except: pass
-try: TKwindows.tk.call('namespace', 'import', '::tk::dialog::file::')
-except: pass
-try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenBtn', '1')
-except: pass
-try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
-except: pass
-TKwindows.update()
-    
-#intercatively choose input NIFTI file
-InputFile = askopenfilename(title="Choose (masked) NIFTI file", filetypes=[("List of spheres files",('.sphrs'))])
-if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
-InputFile = os.path.abspath(InputFile)
-TKwindows.update()
-try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
-except: pass #silent
-dirname  = os.path.dirname(InputFile)
-basename = os.path.basename(InputFile)
-basename = basename[0:basename.rfind('.sphrs')]
-
-#read sphere file
-print ('Reading input file') 
-data = np.genfromtxt(InputFile, comments='#', delimiter=',')
-if data.shape[0]==0: print ("ERROR no data found in input file"); sys.exit(2)
-if len(data.shape)==1: # just one sphere
-    data = np.reshape(data, (-1, data.shape[0]))    
-if data.shape[1]!=4: print ("ERROR inconsistent data in input file"); sys.exit(2)
-if len(data.shape)!=2: print ("ERROR inconsistent dimension of input file"); sys.exit(2)
-min_radius = np.min (data[:,3])       
-
-# ------------------------- VTK code starts here -----------------------------
-
-#redirect VTK messages
-ow = vtk.vtkOutputWindow()
-ow.SendToStdErrOn()
-
-#set number of cores   
-cores=mp.cpu_count()-1; cores = max (1,cores)
-print ('Vtk multithreading set to %d cores ' % cores)   
-vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(cores)
-
-def sphere(params): #input [X,Y,Z,Radius] #output mesh
+        
+        
+def sphere(params, min_radius): #input [X,Y,Z,Radius] #output mesh
+    vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(1) # parallelized otherwise
     #
     # vtkSphereSource gives a geodesic aproximation
     # which does not look good, instead ...
@@ -155,9 +97,7 @@ def sphere(params): #input [X,Y,Z,Radius] #output mesh
     origin = params[0:3]
     ico = vtk.vtkPlatonicSolidSource()
     ico.SetSolidTypeToIcosahedron()
-    subdivide = vtk.vtkLoopSubdivisionFilter()        # set radius = -1.414*params[3] (baseline)
-    #subdivide = vtk.vtkButterflySubdivisionFilter()  # set radius = -1.000*params[3] (similar, leaves more faces - bad)
-    #subdivide = vtk.vtkLinearSubdivisionFilter()     # set radius = -1.414*params[3] (slightly faster, but bad result)
+    subdivide = vtk.vtkLoopSubdivisionFilter()
     subdivide.SetNumberOfSubdivisions(resolution)
     subdivide.SetInputConnection(ico.GetOutputPort())
     scale_transform = vtk.vtkTransform()
@@ -167,204 +107,225 @@ def sphere(params): #input [X,Y,Z,Radius] #output mesh
     scaled.SetInputConnection(subdivide.GetOutputPort())
     scaled.SetTransform(scale_transform)
     scaled.Update()
-    #ncells = scaled.GetOutput().GetNumberOfCells();
-    #print(ncells)
-    return scaled.GetOutput()
-    '''
-    # simple solution with vtkSphereSource
-    resolution = 15+int(math.ceil(params[3]/min_radius))#**1.0)
-    source = vtk.vtkSphereSource()
-    source.SetCenter(params[0],params[1],params[2])
-    source.SetRadius(params[3])
-    source.SetThetaResolution (resolution)
-    source.SetPhiResolution (resolution)
-    source.Update()
-    #ncells = source.GetOutput().GetNumberOfCells();
-    #print(ncells)
-    return source.GetOutput()
-    '''
+    #calculate point normals and put into numpy array
+    Normals= vtk.vtkPolyDataNormals()
+    Normals.SetInputConnection(scaled.GetOutputPort())
+    Normals.ComputeCellNormalsOff()
+    Normals.ComputePointNormalsOn()
+    Normals.SplittingOff() 
+    Normals.ConsistencyOff()
+    Normals.AutoOrientNormalsOff()
+    Normals.Update()
+    #points and normals to numpy array 
+    points  = np.asarray(Normals.GetOutput().GetPoints().GetData())
+    normals = np.asarray(Normals.GetOutput().GetPointData().GetNormals())    
+    #just checking
+    if points.shape!=normals.shape:
+       print ('Error: Soething went wrong badly while calculation point normals')
+       sys.exit(1)
+    #join arrays
+    result = np.concatenate ((points, normals), axis=1)
+    return result        
 
-#create mesh from spheres
-print ('Creating mesh ',end='')
-prog_dec = int(data.shape[0]/20)+1
-mesh=sphere(data[0,:])
-for k in range (1,data.shape[0]):
-    if k%prog_dec==0: print ('.',end='') # progress indicator
-    new_sphere = sphere(data[k,:])    
-    append = vtk.vtkAppendPolyData()
-    append.AddInputData(mesh)
-    append.AddInputData(new_sphere)
-    append.Update()
-    mesh = append.GetOutput()
-print ('')    
-ncells = mesh.GetNumberOfCells(); npoints = mesh.GetNumberOfPoints()     
-if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
-else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+def worker_spheres(start,end,data,prog_dec,min_radius):
+    points = np.zeros ((0,6),dtype=np.float32)
+    for k in range (start, end):
+        if k%prog_dec==0: print ('.',end='') # progress indicator    
+        points = np.concatenate ((points, sphere(data[k,:],min_radius)), axis=0)    
+    return points  
 
+    
+if __name__ == '__main__':
+    mp.freeze_support() #required for pyinstaller
+    #general initialization stuff  
+    space=' '; slash='/'; 
+    if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
+    Program_name = os.path.basename(sys.argv[0]); 
+    if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
+    try: resourcedir = sys._MEIPASS+slash # when on PyInstaller 
+    except: resourcedir = os.path.abspath(os.path.dirname(sys.argv[0]))+slash; 
+    python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
+    # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
+    if sys.platform=="win32": os.system("title "+Program_name)
+    #check for external executables
+    if not os.path.isfile(os.path.join(resourcedir,'SSDRecon.exe')):
+        print ('ERROR:  SSDRecon executable not found '); sys.exit(1)
 
-#find interior points
-print ('Identifying interior points ',end='')
-prog_dec = int(data.shape[0]/20)+1
-point_remove_array = np.zeros ((0),dtype=np.int64)
-allpoints = np.asarray(mesh.GetPoints().GetData())
-if numexpr_installed: #40% faster
-    ne.set_num_threads(cores)
-    for k in range (0,data.shape[0]):
-        if k%prog_dec==0: print ('.',end='') # progress indicator
-        sphere_origin = data[k,0:3]
-        sphere_radius_sq = (0.95*data[k,3])**2.
-        allpoints_diff = ne.evaluate("allpoints-sphere_origin")
-        x = allpoints_diff[:,0]; y = allpoints_diff[:,1]; z = allpoints_diff[:,2]
-        dist_sq = ne.evaluate("x**2+y**2+z**2") 
-        temp_array = np.asarray(np.where(ne.evaluate("dist_sq<sphere_radius_sq"))).flatten()
-        point_remove_array = np.append(point_remove_array,temp_array)        
-else:
-    for k in range (0,data.shape[0]):
-        if k%prog_dec==0: print ('.',end='') # progress indicator
-        sphere_origin = data[k,0:3]
-        sphere_radius_sq = (0.95*data[k,3])**2.
-        allpoints_diff = allpoints - sphere_origin
-        dist_sq = allpoints_diff[:,0]**2.+allpoints_diff[:,1]**2.+allpoints_diff[:,2]**2. 
-        temp_array = np.asarray(np.where(dist_sq<sphere_radius_sq)).flatten()
-        point_remove_array = np.append(point_remove_array,temp_array)
-point_remove_array = np.unique (point_remove_array)
-print ('')    
+    #redirect VTK messages
+    ow = vtk.vtkOutputWindow()
+    ow.SendToStdErrOn()
+        
+    #TK initialization       
+    TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
+    TKwindows.update()
+    # the following tries to disable showing hidden files/folders under linux
+    try: TKwindows.tk.call('tk_getOpenFile', '-foobarz')
+    except: pass
+    try: TKwindows.tk.call('namespace', 'import', '::tk::dialog::file::')
+    except: pass
+    try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenBtn', '1')
+    except: pass
+    try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
+    except: pass
+    TKwindows.update()
+        
+    #intercatively choose input NIFTI file
+    InputFile = askopenfilename(title="Choose (masked) NIFTI file", filetypes=[("List of spheres files",('.sphrs'))])
+    if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
+    InputFile = os.path.abspath(InputFile)
+    TKwindows.update()
+    try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+    except: pass #silent
+    dirname  = os.path.dirname(InputFile)
+    basename = os.path.basename(InputFile)
+    basename = basename[0:basename.rfind('.sphrs')]
 
-#find all associated cells
-print ('Identifying interior cells ',end='')
-prog_dec = int(point_remove_array.shape[0]/20)+1
-cell_remove_list =[]
-for k in range (point_remove_array.shape[0]):
-    if k%prog_dec==0: print ('.',end='') # progress indicator
-    idlist=vtk.vtkIdList()   
-    mesh.GetPointCells(point_remove_array[k], idlist)        
-    for l in range (idlist.GetNumberOfIds()):   
-        cell_remove_list.append(idlist.GetId(l))
-cell_remove_array=np.unique(np.asarray(cell_remove_list))
-print ('')
-
-#delete and remove the identified cells
-print ('Removing interior cells ',end='')
-prog_dec = int(cell_remove_array.shape[0]/20)+1
-for k in range (cell_remove_array.shape[0]):
-    mesh.DeleteCell(cell_remove_array[k])
-    if k%prog_dec==0: print ('.',end='') # progress indicator
-print ('')
-mesh.RemoveDeletedCells()
-
-#delete unused points
-clean1 = vtk.vtkCleanPolyData()
-clean1.SetInputData(mesh)
-clean1.Update()
-mesh = clean1.GetOutput()
-ncells = mesh.GetNumberOfCells(); npoints = mesh.GetNumberOfPoints()     
-if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
-else: print("\nERROR: zero cells in mesh"); sys.exit(1)
-
-#get points into numpy array
-allpoints = np.asarray(mesh.GetPoints().GetData())
-
-#calculate point normals and put into numpy array
-Normals= vtk.vtkPolyDataNormals()
-Normals.SetInputData(mesh)
-Normals.ComputeCellNormalsOff()
-Normals.ComputePointNormalsOn()
-Normals.SplittingOff() 
-Normals.ConsistencyOff()
-Normals.AutoOrientNormalsOff()
-Normals.Update()
-allnormals = np.asarray(Normals.GetOutput().GetPointData().GetNormals())
-
-#just checking
-if allpoints.shape!=allnormals.shape:
-    print ('Error: Soething went wrong badly while calculation point normals')
-    sys.exit(1)
-
-#save point cloud
-pointcloud_file=os.path.join(dirname,basename+'_pointcloud.ply')
-f = open(pointcloud_file,"w") 
-f.write ("ply\n")
-f.write ("format ascii 1.0\n")
-f.write ("comment homebrew generated\n")
-f.write ("element vertex %d\n" % allpoints.shape[0])
-f.write ("property float x\n")
-f.write ("property float y\n")
-f.write ("property float z\n")
-f.write ("property float nx\n")
-f.write ("property float ny\n")
-f.write ("property float nz\n")
-f.write ("element face 0\n")
-f.write ("property list uchar int vertex_indices\n")
-f.write ("end_header\n")
-for k in range (allpoints.shape[0]):
-    f.write ("%f %f %f %f %f %f\n" % (allpoints[k,0],allpoints[k,1],allpoints[k,2],
-                                allnormals[k,0],allnormals[k,1],allnormals[k,2]))                             
-f.close()
-
-#run SSDRecon.exe
-print ('Reconstructing surface mesh with SSDRecon') 
-PLYfile = os.path.join(dirname,basename+'.ply')
-command = '"'+os.path.join(resourcedir,'SSDRecon.exe')+'" '
-command +='--in "'+pointcloud_file+'" '
-command +='--out "'+PLYfile+'" '
-command +='--depth 10' 
-run (command)
-deletefile (pointcloud_file) 
-
-#read PLY
-reader = vtk.vtkPLYReader()
-reader.SetFileName(PLYfile)
-reader.Update()
-deletefile (PLYfile)
-ncells  = reader.GetOutput().GetNumberOfCells(); 
-npoints = reader.GetOutput().GetNumberOfPoints()     
-if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
-else: print("\nERROR: zero cells in mesh"); sys.exit(1)
-
-smooth1 = vtk.vtkSmoothPolyDataFilter()
-smooth1.SetInputConnection(reader.GetOutputPort())
-smooth1.SetNumberOfIterations(7)
-smooth1.SetRelaxationFactor(0.1)
-smooth1.FeatureEdgeSmoothingOff()
-smooth1.BoundarySmoothingOff()
-smooth1.Update()
-
-print ('Decimating mesh')
-decimate = vtk.vtkQuadricDecimation()
-decimate.SetInputConnection(smooth1.GetOutputPort())
-decimate.SetTargetReduction(0.5)
-decimate.Update()
-ncells  = decimate.GetOutput().GetNumberOfCells(); 
-npoints = decimate.GetOutput().GetNumberOfPoints()     
-if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
-else: print("\nERROR: zero cells in mesh"); sys.exit(1)
-
-smooth2 = vtk.vtkSmoothPolyDataFilter()
-smooth2.SetInputConnection(decimate.GetOutputPort())
-smooth2.SetNumberOfIterations(7)
-smooth2.SetRelaxationFactor(0.1)
-smooth2.FeatureEdgeSmoothingOff()
-smooth2.BoundarySmoothingOff()
-smooth2.Update()
-
-writer = vtk.vtkSTLWriter()
-writer.SetInputConnection(smooth2.GetOutputPort())
-writer.SetFileTypeToBinary()
-writer.SetFileName(os.path.join(dirname,basename+'.stl'))
-writer.Write()       
+    #read sphere file
+    print ('Reading input file') 
+    data = np.genfromtxt(InputFile, comments='#', delimiter=',')
+    if data.shape[0]==0: print ("ERROR no data found in input file"); sys.exit(2)
+    if len(data.shape)==1: # just one sphere
+        data = np.reshape(data, (-1, data.shape[0]))    
+    if data.shape[1]!=4: print ("ERROR inconsistent data in input file"); sys.exit(2)
+    if len(data.shape)!=2: print ("ERROR inconsistent dimension of input file"); sys.exit(2)
+    min_radius = np.min (data[:,3])       
 
 
-print("done")
-if sys.platform=="win32": os.system("pause") # windows
-else: 
-    #os.system('read -s -n 1 -p "Press any key to continue...\n"')
-    import termios
-    print("Press any key to continue...")
-    fd = sys.stdin.fileno()
-    oldterm = termios.tcgetattr(fd)
-    newattr = termios.tcgetattr(fd)
-    newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
-    termios.tcsetattr(fd, termios.TCSANOW, newattr)
-    try: result = sys.stdin.read(1)
-    except IOError: pass
-    finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
+
+
+    #set number of cores   
+    cores=mp.cpu_count()-1; cores = max (1,cores)
+    cores_act=min(cores,data.shape[0]) # just in case (don't allocate unnecessary cores)
+    print ('Multithreading set to %d cores ' % cores_act)
+    p = mp.Pool(cores_act)
+    return_vals=[]        
+    #create mesh from spheres
+    print ('Creating mesh ',end='')
+    prog_dec = int(data.shape[0]/20)+1
+    for i in range (data.shape[0]):
+        workpiece=int(math.ceil(float(data.shape[0])/float(cores_act)))
+        start = i*workpiece
+        end   = start+workpiece
+        if end > data.shape[0]: end = data.shape[0]
+        return_vals.append(p.apply_async(worker_spheres, args = (start, end, data, prog_dec, min_radius)))
+    p.close()
+    p.join()
+    allpoints = np.zeros ((0,6),dtype=np.float32)
+    for i in range(0,cores_act):
+        allpoints = np.concatenate ((allpoints, return_vals[i].get()), axis=0) # return values 
+    print ('')     
+    print("Mesh has %d points" % allpoints.shape[0])
+
+    #sucessively eliminate interior points
+
+    prog_dec = int(data.shape[0]/20)+1
+    if numexpr_installed: #40% faster
+        print ('Removing interior points (using NumExpr)')    
+        ne.set_num_threads(cores)
+        for k in range (0,data.shape[0]):
+            sphere_origin = data[k,0:3]
+            sphere_radius_sq = (0.95*data[k,3])**2.
+            points = allpoints[:,0:3]
+            points_diff = ne.evaluate("points-sphere_origin")
+            x = points_diff[:,0]; y = points_diff[:,1]; z = points_diff[:,2]
+            dist_sq = ne.evaluate("x**2+y**2+z**2") 
+            allpoints = allpoints[dist_sq>sphere_radius_sq,:]
+            if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
+    else:
+        print ('Removing interior points ')    
+        for k in range (0,data.shape[0]):
+            sphere_origin = data[k,0:3]
+            sphere_radius_sq = (0.95*data[k,3])**2.     
+            points_diff = allpoints[:,0:3] - sphere_origin
+            dist_sq = points_diff[:,0]**2.+points_diff[:,1]**2.+points_diff[:,2]**2. 
+            allpoints = allpoints[dist_sq>sphere_radius_sq,:]
+            if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
+      
+    #save point cloud
+    pointcloud_file=os.path.join(dirname,basename+'_pointcloud.ply')
+    f = open(pointcloud_file,"w") 
+    f.write ("ply\n")
+    f.write ("format ascii 1.0\n")
+    f.write ("comment homebrew generated\n")
+    f.write ("element vertex %d\n" % allpoints.shape[0])
+    f.write ("property float x\n")
+    f.write ("property float y\n")
+    f.write ("property float z\n")
+    f.write ("property float nx\n")
+    f.write ("property float ny\n")
+    f.write ("property float nz\n")
+    f.write ("element face 0\n")
+    f.write ("property list uchar int vertex_indices\n")
+    f.write ("end_header\n")
+    for k in range (allpoints.shape[0]):
+        f.write ("%f %f %f %f %f %f\n" % (allpoints[k,0],allpoints[k,1],allpoints[k,2],
+                                    allpoints[k,3],allpoints[k,4],allpoints[k,5]))                             
+    f.close()
+
+    #run SSDRecon.exe
+    print ('Reconstructing surface mesh with SSDRecon') 
+    PLYfile = os.path.join(dirname,basename+'.ply')
+    command = '"'+os.path.join(resourcedir,'SSDRecon.exe')+'" '
+    command +='--in "'+pointcloud_file+'" '
+    command +='--out "'+PLYfile+'" '
+    command +='--depth 10' 
+    run (command)
+    deletefile (pointcloud_file) 
+
+    #read PLY
+    reader = vtk.vtkPLYReader()
+    reader.SetFileName(PLYfile)
+    reader.Update()
+    deletefile (PLYfile)
+    ncells  = reader.GetOutput().GetNumberOfCells(); 
+    npoints = reader.GetOutput().GetNumberOfPoints()     
+    if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
+    else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+
+    smooth1 = vtk.vtkSmoothPolyDataFilter()
+    smooth1.SetInputConnection(reader.GetOutputPort())
+    smooth1.SetNumberOfIterations(7)
+    smooth1.SetRelaxationFactor(0.1)
+    smooth1.FeatureEdgeSmoothingOff()
+    smooth1.BoundarySmoothingOff()
+    smooth1.Update()
+
+    print ('Decimating mesh')
+    decimate = vtk.vtkQuadricDecimation()
+    decimate.SetInputConnection(smooth1.GetOutputPort())
+    decimate.SetTargetReduction(0.5)
+    decimate.Update()
+    ncells  = decimate.GetOutput().GetNumberOfCells(); 
+    npoints = decimate.GetOutput().GetNumberOfPoints()     
+    if ncells>0: print("Mesh has %d cells and %d points" % (ncells, npoints))
+    else: print("\nERROR: zero cells in mesh"); sys.exit(1)
+
+    smooth2 = vtk.vtkSmoothPolyDataFilter()
+    smooth2.SetInputConnection(decimate.GetOutputPort())
+    smooth2.SetNumberOfIterations(7)
+    smooth2.SetRelaxationFactor(0.1)
+    smooth2.FeatureEdgeSmoothingOff()
+    smooth2.BoundarySmoothingOff()
+    smooth2.Update()
+
+    writer = vtk.vtkSTLWriter()
+    writer.SetInputConnection(smooth2.GetOutputPort())
+    writer.SetFileTypeToBinary()
+    writer.SetFileName(os.path.join(dirname,basename+'.stl'))
+    writer.Write()       
+
+
+    print("done")
+    if sys.platform=="win32": os.system("pause") # windows
+    else: 
+        #os.system('read -s -n 1 -p "Press any key to continue...\n"')
+        import termios
+        print("Press any key to continue...")
+        fd = sys.stdin.fileno()
+        oldterm = termios.tcgetattr(fd)
+        newattr = termios.tcgetattr(fd)
+        newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
+        termios.tcsetattr(fd, termios.TCSANOW, newattr)
+        try: result = sys.stdin.read(1)
+        except IOError: pass
+        finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
