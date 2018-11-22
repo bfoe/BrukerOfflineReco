@@ -125,20 +125,20 @@ def sphere2points(params, min_radius): #input [X,Y,Z,Radius] #output mesh
 
 def worker_spheres(start,end,data,prog_dec,min_radius):
     points = np.zeros ((0,6),dtype=np.float32)
-    for k in range (start, end):
-        if k%prog_dec==0: print ('.',end='') # progress indicator    
-        points = np.concatenate ((points, sphere2points(data[k,:],min_radius)), axis=0)    
+    for k in range (start, end):  
+        points = np.concatenate ((points, sphere2points(data[k,:],min_radius)), axis=0)
+        if k%prog_dec==0: print ('.',end='') # progress indicator          
     return points  
 
 def worker_remove_interior_points (points,data,prog_dec):  
     ne.set_num_threads(1) # parallelized here
-    for k in range (data.shape[0]):
-        if k%prog_dec==0: print(".", end='')     
+    for k in range (data.shape[0]):   
         sphere_r_sq = (0.95*data[k,3])**2.
         sphere_x = data[k,0]; sphere_y = data[k,1]; sphere_z = data[k,2]
         points_x = points[:,0]; points_y = points[:,1]; points_z = points[:,2]
         dist_sq = ne.evaluate("(points_x-sphere_x)**2 + (points_y-sphere_y)**2 + (points_z-sphere_z)**2")
         points = points[dist_sq>sphere_r_sq,:]
+        if k%prog_dec==0: print(".", end='')          
     return points
     
     
@@ -206,8 +206,8 @@ if __name__ == '__main__':
     p = mp.Pool(cores_act)
     return_vals=[]        
     #create mesh from spheres
-    print ('Creating mesh ',end='')
-    prog_dec = int(data.shape[0]/20)+1
+    print ('Creating mesh')
+    prog_dec = int(data.shape[0]/(160-cores_act))+1
     for i in range (cores_act):    
         workpiece=int(math.ceil(float(data.shape[0])/float(cores_act)))
         start = i*workpiece
@@ -228,8 +228,8 @@ if __name__ == '__main__':
     p = mp.Pool(cores_act)
     return_vals=[]        
     #sucessively removing interior points
-    print ('Removing interior points ',end='')
-    prog_dec = int(data.shape[0]/20*cores_act)+1
+    print ('Removing interior points')
+    prog_dec = int(data.shape[0]/(160-cores_act)*cores_act)+1
     for i in range (cores_act):
         workpiece=int(math.ceil(float(allpoints.shape[0])/float(cores_act)))
         start = i*workpiece
