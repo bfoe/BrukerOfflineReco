@@ -27,7 +27,7 @@
 #    with the following additional libraries: 
 #    - numpy
 #    - vtk 
-#    - numexpr (optional, speeds up some things)
+#    - numexpr
 #    - SSDRecon.exe executable from
 #      http://www.cs.jhu.edu/~misha/Code/PoissonRecon/Version10.04/
 #
@@ -43,10 +43,7 @@ import subprocess
 import vtk
 from vtk.util import numpy_support
 import multiprocessing as mp
-
-numexpr_installed = True
-try: import numexpr as ne
-except: numexpr_installed = False
+import numexpr as ne
 
 
 TK_installed=True
@@ -81,9 +78,8 @@ def run (command):
         print (command)   
         print (stderr)
         print (stdout)
-        
-        
-def sphere(params, min_radius): #input [X,Y,Z,Radius] #output mesh
+
+def sphere2points(params, min_radius): #input [X,Y,Z,Radius] #output mesh
     vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(1) # parallelized otherwise
     #
     # vtkSphereSource gives a geodesic aproximation
@@ -131,7 +127,7 @@ def worker_spheres(start,end,data,prog_dec,min_radius):
     points = np.zeros ((0,6),dtype=np.float32)
     for k in range (start, end):
         if k%prog_dec==0: print ('.',end='') # progress indicator    
-        points = np.concatenate ((points, sphere(data[k,:],min_radius)), axis=0)    
+        points = np.concatenate ((points, sphere2points(data[k,:],min_radius)), axis=0)    
     return points  
 
     
@@ -191,8 +187,6 @@ if __name__ == '__main__':
     min_radius = np.min (data[:,3])       
 
 
-
-
     #set number of cores   
     cores=mp.cpu_count()-1; cores = max (1,cores)
     cores_act=min(cores,data.shape[0]) # just in case (don't allocate unnecessary cores)
@@ -217,29 +211,16 @@ if __name__ == '__main__':
     print("Mesh has %d points" % allpoints.shape[0])
 
     #sucessively eliminate interior points
-
     prog_dec = int(data.shape[0]/20)+1
-    if numexpr_installed: #40% faster
-        print ('Removing interior points (using NumExpr)')    
-        ne.set_num_threads(cores)
-        for k in range (0,data.shape[0]):
-            sphere_origin = data[k,0:3]
-            sphere_radius_sq = (0.95*data[k,3])**2.
-            points = allpoints[:,0:3]
-            points_diff = ne.evaluate("points-sphere_origin")
-            x = points_diff[:,0]; y = points_diff[:,1]; z = points_diff[:,2]
-            dist_sq = ne.evaluate("x**2+y**2+z**2") 
-            allpoints = allpoints[dist_sq>sphere_radius_sq,:]
-            if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
-    else:
-        print ('Removing interior points ')    
-        for k in range (0,data.shape[0]):
-            sphere_origin = data[k,0:3]
-            sphere_radius_sq = (0.95*data[k,3])**2.     
-            points_diff = allpoints[:,0:3] - sphere_origin
-            dist_sq = points_diff[:,0]**2.+points_diff[:,1]**2.+points_diff[:,2]**2. 
-            allpoints = allpoints[dist_sq>sphere_radius_sq,:]
-            if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
+    ne.set_num_threads(cores)
+    for k in range (data.shape[0]):
+        sphere_r_sq = (0.95*data[k,3])**2.
+        sphere_x = data[k,0]; sphere_y = data[k,1]; sphere_z = data[k,2]
+        points_x = allpoints[:,0]; points_y = allpoints[:,1]; points_z = allpoints[:,2]
+        dist_sq = ne.evaluate("(points_x-sphere_x)**2 + (points_y-sphere_y)**2 + (points_z-sphere_z)**2")
+        allpoints = allpoints[dist_sq>sphere_r_sq,:]
+        if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
+
       
     #save point cloud
     pointcloud_file=os.path.join(dirname,basename+'_pointcloud.ply')
@@ -272,6 +253,9 @@ if __name__ == '__main__':
     run (command)
     deletefile (pointcloud_file) 
 
+    #set VTK multiprocessing
+    vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(cores)
+    
     #read PLY
     reader = vtk.vtkPLYReader()
     reader.SetFileName(PLYfile)
@@ -313,7 +297,6 @@ if __name__ == '__main__':
     writer.SetFileTypeToBinary()
     writer.SetFileName(os.path.join(dirname,basename+'.stl'))
     writer.Write()       
-
 
     print("done")
     if sys.platform=="win32": os.system("pause") # windows

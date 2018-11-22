@@ -62,16 +62,12 @@ def loadGraph(filepath):
 
 def get_data(nodes, i, prog_dec):
     if i%prog_dec==0: print ('.',end='') # progress indicator
-    #x = nodes.values()[i]['metadata']['node_coordinates']['x']
-    x = nodes.values()[i].values()[0]['node_coordinates']['x']
-    #y = nodes.values()[i]['metadata']['node_coordinates']['y']
-    y = nodes.values()[i].values()[0]['node_coordinates']['y']
-    #z = nodes.values()[i]['metadata']['node_coordinates']['z']
-    z = nodes.values()[i].values()[0]['node_coordinates']['z']
-    #z = nodes.values()[i]['metadata']['node_squared_radius']
+    x = nodes.values()[i]['metadata']['node_coordinates']['x']
+    y = nodes.values()[i]['metadata']['node_coordinates']['y']
+    z = nodes.values()[i]['metadata']['node_coordinates']['z']
+    r = nodes.values()[i]['metadata']['node_squared_radius']
     # in some json files instead of ['node_squared_radius'] use ['node_radius']
     # then comment the below line: data[:,3] = np.sqrt(data[:,3])
-    r = nodes.values()[i].values()[0]['node_squared_radius']
     return x,y,z,r;        
     
 def worker_get_data(start,end,nodes,prog_dec):    
@@ -124,7 +120,7 @@ if __name__ == '__main__':
     nodes = G.node_dict_factory(G.nodes(data=True));
     print ('Cleaning up node dictionary')
     empty_keys = [k for k,v in nodes.iteritems() if not v]
-    for k in empty_keys: del nodes[k]
+    for k in empty_keys: del nodes[k] # resolve issue of networkx v2.2
 
     cores_act=min(cores,len(nodes)) # just in case (don't allocate unnecessary cores)
     print ('Multithreading set to %d cores ' % cores_act)   
