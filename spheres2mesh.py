@@ -130,6 +130,18 @@ def worker_spheres(start,end,data,prog_dec,min_radius):
         points = np.concatenate ((points, sphere2points(data[k,:],min_radius)), axis=0)    
     return points  
 
+def worker_remove_interior_points (points,data,prog_dec):  
+    ne.set_num_threads(1) # parallelized here
+    for k in range (data.shape[0]):
+        if k%prog_dec==0: print(".", end='')     
+        sphere_r_sq = (0.95*data[k,3])**2.
+        sphere_x = data[k,0]; sphere_y = data[k,1]; sphere_z = data[k,2]
+        points_x = points[:,0]; points_y = points[:,1]; points_z = points[:,2]
+        dist_sq = ne.evaluate("(points_x-sphere_x)**2 + (points_y-sphere_y)**2 + (points_z-sphere_z)**2")
+        points = points[dist_sq>sphere_r_sq,:]
+    return points
+    
+    
     
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller
@@ -189,14 +201,14 @@ if __name__ == '__main__':
 
     #set number of cores   
     cores=mp.cpu_count()-1; cores = max (1,cores)
-    cores_act=min(cores,data.shape[0]) # just in case (don't allocate unnecessary cores)
+    cores_act=min(cores,data.shape[0]) # don't allocate unnecessary cores
     print ('Multithreading set to %d cores ' % cores_act)
     p = mp.Pool(cores_act)
     return_vals=[]        
     #create mesh from spheres
     print ('Creating mesh ',end='')
     prog_dec = int(data.shape[0]/20)+1
-    for i in range (data.shape[0]):
+    for i in range (cores_act):    
         workpiece=int(math.ceil(float(data.shape[0])/float(cores_act)))
         start = i*workpiece
         end   = start+workpiece
@@ -205,23 +217,34 @@ if __name__ == '__main__':
     p.close()
     p.join()
     allpoints = np.zeros ((0,6),dtype=np.float32)
-    for i in range(0,cores_act):
+    for i in range(cores_act):
         allpoints = np.concatenate ((allpoints, return_vals[i].get()), axis=0) # return values 
     print ('')     
     print("Mesh has %d points" % allpoints.shape[0])
 
-    #sucessively eliminate interior points
-    prog_dec = int(data.shape[0]/20)+1
-    ne.set_num_threads(cores)
-    for k in range (data.shape[0]):
-        sphere_r_sq = (0.95*data[k,3])**2.
-        sphere_x = data[k,0]; sphere_y = data[k,1]; sphere_z = data[k,2]
-        points_x = allpoints[:,0]; points_y = allpoints[:,1]; points_z = allpoints[:,2]
-        dist_sq = ne.evaluate("(points_x-sphere_x)**2 + (points_y-sphere_y)**2 + (points_z-sphere_z)**2")
-        allpoints = allpoints[dist_sq>sphere_r_sq,:]
-        if k%prog_dec==0: print("   Mesh has %d points" % allpoints.shape[0])
+    
+    cores_act=min(cores,allpoints.shape[0]) # don't allocate unnecessary cores
+    print ('Multithreading set to %d cores ' % cores_act)
+    p = mp.Pool(cores_act)
+    return_vals=[]        
+    #sucessively removing interior points
+    print ('Removing interior points ',end='')
+    prog_dec = int(data.shape[0]/20*cores_act)+1
+    for i in range (cores_act):
+        workpiece=int(math.ceil(float(allpoints.shape[0])/float(cores_act)))
+        start = i*workpiece
+        end   = start+workpiece
+        if end > allpoints.shape[0]: end = allpoints.shape[0]
+        return_vals.append(p.apply_async(worker_remove_interior_points, args = (allpoints[start:end,:], data, prog_dec)))
+    p.close()
+    p.join()
+    allpoints = np.zeros ((0,6),dtype=np.float32)
+    for i in range(cores_act):
+        allpoints = np.concatenate ((allpoints, return_vals[i].get()), axis=0) # return values 
+    print ('')     
+    print("Mesh has %d points" % allpoints.shape[0])        
 
-      
+    
     #save point cloud
     pointcloud_file=os.path.join(dirname,basename+'_pointcloud.ply')
     f = open(pointcloud_file,"w") 
