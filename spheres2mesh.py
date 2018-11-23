@@ -89,6 +89,10 @@ def sphere2points(params, min_radius): #input [X,Y,Z,Radius] #output mesh
     # increasing the resolution with appropriate subdivisions
     #
     resolution = 1+int(math.ceil(params[3]/min_radius)**0.5)
+    # the above is to increase the number of triangles for large spheres
+    # I guess a better aproximation would be:
+    # resolution = 1+int(round(2.*math.log(params[3]/min_radius,3),0))
+    # but since the factor is integer it doesn't matter too much 
     radius = -1.414*params[3]    
     origin = params[0:3]
     ico = vtk.vtkPlatonicSolidSource()
