@@ -41,6 +41,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
+import multiprocessing as mp
 if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
    from scipy_extract import rotate  
 else: # running native python  
@@ -66,97 +67,111 @@ if not TK_installed:
     print ('       http://www.activestate.com/activetcl/downloads')
     exit(2)
 
+    
+def worker(data,angle):
+    print ('.',end='')
+    temp = rotate (data, angle, axes=(1,2), reshape = False)
+    return np.amax(temp, axis=2)
+    
+if __name__ == '__main__':
+    mp.freeze_support() #required for pyinstaller        
+    #general initialization stuff
+    space=' '; slash='/'; 
+    if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
+    Program_name = os.path.basename(sys.argv[0]); 
+    if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
+    python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
+    # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
+    if sys.platform=="win32": 
+        os.system("title "+Program_name)    
        
-#general initialization stuff
-space=' '; slash='/'; 
-if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
-Program_name = os.path.basename(sys.argv[0]); 
-if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
-python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
-# sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
-if sys.platform=="win32": 
-    os.system("title "+Program_name)    
-   
-#TK initialization       
-TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
-TKwindows.update()
-# the following tries to disable showing hidden files/folders under linux
-try: TKwindows.tk.call('tk_getOpenFile', '-foobarz')
-except: pass
-try: TKwindows.tk.call('namespace', 'import', '::tk::dialog::file::')
-except: pass
-try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenBtn', '1')
-except: pass
-try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
-except: pass
-TKwindows.update()
+    #TK initialization       
+    TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
+    TKwindows.update()
+    # the following tries to disable showing hidden files/folders under linux
+    try: TKwindows.tk.call('tk_getOpenFile', '-foobarz')
+    except: pass
+    try: TKwindows.tk.call('namespace', 'import', '::tk::dialog::file::')
+    except: pass
+    try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenBtn', '1')
+    except: pass
+    try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
+    except: pass
+    TKwindows.update()
 
-#interactively choose NIFTI file
-FIDfile1 = askopenfilename(title="Choose moving NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
-if FIDfile1 == "": print ('ERROR: NIFTI file not specified'); exit(2)
-FIDfile1 = os.path.abspath(FIDfile1) 
+    #interactively choose NIFTI file
+    FIDfile1 = askopenfilename(title="Choose moving NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+    if FIDfile1 == "": print ('ERROR: NIFTI file not specified'); exit(2)
+    FIDfile1 = os.path.abspath(FIDfile1) 
 
 
-# Set Output filenames
-dirname  = os.path.dirname(FIDfile1)
-basename = os.path.basename(FIDfile1)
-basename = basename[0:basename.rfind('.nii.gz')]
-outfile = basename+'_MIP.nii.gz'
+    # Set Output filenames
+    dirname  = os.path.dirname(FIDfile1)
+    basename = os.path.basename(FIDfile1)
+    basename = basename[0:basename.rfind('.nii.gz')]
+    outfile = basename+'_MIP.nii.gz'
 
 
-#read NIFTI file
-print ('Read  NIFTI file')
-img = nib.load(FIDfile1)
-data = img.get_data().astype(np.float32)
-SpatResol = np.asarray(img.header.get_zooms())
-Shape = np.asarray(img.header.get_data_shape())
+    #read NIFTI file
+    print ('Read  NIFTI file')
+    img = nib.load(FIDfile1)
+    data = img.get_data().astype(np.float32)
+    SpatResol = np.asarray(img.header.get_zooms())
+    Shape = np.asarray(img.header.get_data_shape())
 
 
-#set main to first dimension
-FOV = Shape*SpatResol
-directions = np.argsort(FOV)
-directions = directions[::-1] # decreasing order
-if directions[0]==1: transpose = [1,2,0]
-elif directions[0]==2: transpose = [2,0,1]
-else: transpose = [0,1,2]
-#print ('Image transposition: '+np.array2string(np.asarray(transpose)+1))
-data = np.transpose (data, axes=transpose)
-SpatResol = SpatResol[transpose]
-Shape = Shape[transpose]
+    #set main to first dimension
+    FOV = Shape*SpatResol
+    directions = np.argsort(FOV)
+    directions = directions[::-1] # decreasing order
+    if directions[0]==1: transpose = [1,2,0]
+    elif directions[0]==2: transpose = [2,0,1]
+    else: transpose = [0,1,2]
+    #print ('Image transposition: '+np.array2string(np.asarray(transpose)+1))
+    data = np.transpose (data, axes=transpose)
+    SpatResol = SpatResol[transpose]
+    Shape = Shape[transpose]
 
-#calculate MIP
-nsteps = 72; angle =360./nsteps
-MIP_data = np.zeros (shape = (Shape[0],Shape[1],nsteps), dtype=np.float32)
-for i in range (nsteps):
-    temp = rotate (data, i*angle, axes=(1,2), reshape = False)
-    MIP_data[:,:,i] = np.amax(temp, axis=2)
-    print ('.', end='') # progress indicator
-print ('') # newline
-    
-#transpose, such that longest dimension (0) is in vertical direction
-MIP_data = np.transpose (MIP_data, axes=(1,0,2))    
-SpatResol = SpatResol[[1,0,2]]
-Shape = Shape[[1,0,2]]
-    
-#transform to int
-max_ = np.amax(MIP_data)
-MIP_data *= 32767./max_
-MIP_data = MIP_data.astype(np.int16)
+    #calculate MIP
+    nsteps = 72; angle =360./nsteps
+    cores=mp.cpu_count()-1; cores = max (1,cores) #set number of cores
+    cores = min (cores, nsteps) # don't allocate unnecessary cores
+    print ('Multithreading set to %d cores ' % cores)    
+    p = mp.Pool(cores)
+    return_vals=[]
+    for i in range (nsteps):
+        return_vals.append(p.apply_async(worker, args = (data,i*angle)))
+    p.close()
+    p.join() 
+    MIP_data = np.zeros (shape = (Shape[0],Shape[1],nsteps), dtype=np.float32)
+    for i in range(nsteps):
+        MIP_data[:,:,i] = return_vals[i].get()  
+    print ('') # newline
+        
+    #transpose, such that longest dimension (0) is in vertical direction
+    MIP_data = np.transpose (MIP_data, axes=(1,0,2))    
+    SpatResol = SpatResol[[1,0,2]]
+    Shape = Shape[[1,0,2]]
+        
+    #transform to int
+    max_ = np.amax(MIP_data)
+    MIP_data *= 32767./max_
+    MIP_data = MIP_data.astype(np.int16)
 
-#Write NIFTI
-aff = np.eye(4)
-aff[0,0] = SpatResol[0]; aff[0,3] = -(MIP_data.shape[0]/2)*aff[0,0]
-aff[1,1] = SpatResol[1]; aff[1,3] = -(MIP_data.shape[1]/2)*aff[1,1]
-aff[2,2] = Shape[2]*SpatResol[2]; aff[2,3] = 0
-img = nib.Nifti1Image(MIP_data, aff)
-img.header.set_slope_inter(max_/32767.,0)
-img.header.set_xyzt_units(3, 8)
-img.set_sform(aff, code=0)
-img.set_qform(aff, code=1)
-try: nib.save(img, os.path.join(dirname,outfile))
-except: print ('ERROR:  problem while writing results'); exit(1)
-print ('Successfully written output file '+outfile)
-      
-#end
-exit(0)
+    #Write NIFTI
+    aff = np.eye(4)
+    aff[0,0] = SpatResol[0]; aff[0,3] = -(MIP_data.shape[0]/2)*aff[0,0]
+    aff[1,1] = SpatResol[1]; aff[1,3] = -(MIP_data.shape[1]/2)*aff[1,1]
+    aff[2,2] = Shape[2]*SpatResol[2]; aff[2,3] = 0
+    img = nib.Nifti1Image(MIP_data, aff)
+    img.header.set_slope_inter(max_/32767.,0)
+    img.header.set_xyzt_units(3, 8)
+    img.set_sform(aff, code=0)
+    img.set_qform(aff, code=1)
+    try: nib.save(img, os.path.join(dirname,outfile))
+    except: print ('ERROR:  problem while writing results'); exit(1)
+    print ('Successfully written output file '+outfile)
+          
+    #end
+    exit(0)
 
