@@ -79,51 +79,21 @@ def run (command):
         print (stderr)
         print (stdout)
 
-def sphere2points(params, min_radius): #input [X,Y,Z,Radius] #output mesh
+def sphere2points(params, min_radius): #input [X,Y,Z,Radius],min #output array[[0..#points],[x,y,z,nx,ny,nz]]
     vtk.vtkMultiThreader.SetGlobalMaximumNumberOfThreads(1) # parallelized otherwise
-    #
-    # vtkSphereSource gives a geodesic aproximation
-    # which does not look good, instead ...
-    #
-    # we aproximate the mesh for the sphere by an icosahedron
-    # increasing the resolution with appropriate subdivisions
-    #
-    resolution = 1+int(math.ceil(params[3]/min_radius)**0.5)
-    # the above is to increase the number of triangles for large spheres
-    # I guess a better aproximation would be:
-    # resolution = 1+int(round(2.*math.log(params[3]/min_radius,3),0))
-    # but since the factor is integer it doesn't matter too much 
-    radius = -1.414*params[3]    
-    origin = params[0:3]
+    resolution = 1+int(math.ceil(params[3]/min_radius)**0.5)  
     ico = vtk.vtkPlatonicSolidSource()
-    ico.SetSolidTypeToIcosahedron()
+    ico.SetSolidTypeToIcosahedron() 
     subdivide = vtk.vtkLoopSubdivisionFilter()
     subdivide.SetNumberOfSubdivisions(resolution)
     subdivide.SetInputConnection(ico.GetOutputPort())
-    scale_transform = vtk.vtkTransform()
-    scale_transform.Scale(radius,radius,radius)
-    scale_transform.Translate(origin[0]/radius,origin[1]/radius,origin[2]/radius)    
-    scaled = vtk.vtkTransformPolyDataFilter()
-    scaled.SetInputConnection(subdivide.GetOutputPort())
-    scaled.SetTransform(scale_transform)
-    scaled.Update()
-    #calculate point normals and put into numpy array
-    Normals= vtk.vtkPolyDataNormals()
-    Normals.SetInputConnection(scaled.GetOutputPort())
-    Normals.ComputeCellNormalsOff()
-    Normals.ComputePointNormalsOn()
-    Normals.SplittingOff() 
-    Normals.ConsistencyOff()
-    Normals.AutoOrientNormalsOff()
-    Normals.Update()
-    #points and normals to numpy array 
-    points  = np.asarray(Normals.GetOutput().GetPoints().GetData())
-    normals = np.asarray(Normals.GetOutput().GetPointData().GetNormals())    
-    #just checking
-    if points.shape!=normals.shape:
-       print ('Error: Soething went wrong badly while calculation point normals')
-       sys.exit(1)
-    #join arrays
+    subdivide.Update()   
+    points  = np.asarray(subdivide.GetOutput().GetPoints().GetData()) 
+    x = points[:,0]; y = points[:,1]; z = points[:,2]       
+    r = ne.evaluate("sqrt(x**2 + y**2 + z**2)")   
+    points = np.divide (points [:,:], r[:,None])
+    normals = points    
+    points = points*params[3] + params[0:3] # scale and translation   
     result = np.concatenate ((points, normals), axis=1)
     return result        
 
@@ -137,7 +107,7 @@ def worker_spheres(start,end,data,prog_dec,min_radius):
 def worker_remove_interior_points (points,data,prog_dec):  
     ne.set_num_threads(1) # parallelized here
     for k in range (data.shape[0]):   
-        sphere_r_sq = (0.95*data[k,3])**2.
+        sphere_r_sq = (0.99*data[k,3])**2.
         sphere_x = data[k,0]; sphere_y = data[k,1]; sphere_z = data[k,2]
         points_x = points[:,0]; points_y = points[:,1]; points_z = points[:,2]
         dist_sq = ne.evaluate("(points_x-sphere_x)**2 + (points_y-sphere_y)**2 + (points_z-sphere_z)**2")
