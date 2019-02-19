@@ -5,7 +5,7 @@
 #
 # outputs 4D NIFTI containing all individual echo images
 # and a 3D NIFTI containing the average of all echoes
-#does not calculate T2 maps, use "NIFTI_T2map" for that
+# does not calculate T2 maps, use "NIFTI_T2map" for that
 #
 # ----- VERSION HISTORY -----
 #
@@ -141,14 +141,7 @@ def ParseSingleValue(val):
         except ValueError:
             # if not, should  be string. Remove  newline character.
             result = val.rstrip('\n')
-    return result   
-
-def smooth(x,window_len):
-    w=np.hanning(window_len)
-    s=np.r_[2*x[0]-x[window_len-1::-1],x,2*x[-1]-x[-1:-window_len:-1]]
-    w=np.hanning(window_len)
-    y=np.convolve(w/w.sum(),s,mode='same')
-    return y[window_len:-window_len+1]  
+    return result     
     
 def FFT2D (array):
     for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.fft(array[:,k,:,:], axis=(0))
