@@ -619,7 +619,7 @@ IMGdata_AVG = IMGdata_AVG.astype(np.int16)
 print('.', end='') #progress indicator
 
 #save NIFTI
-TEs = (TEs*10).astype(np.int16) # convert to int, precision 0.1
+TEs = (TEs*100).astype(np.int16) # convert to int, precision 0.1
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
@@ -632,7 +632,7 @@ NIFTIimg_AVG.set_qform(aff, code=1)
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
 NIFTIimg_ABS.header['descrip'] = "TEs = "+binascii.b2a_uu (TEs.tostring())
 #how to recover the information:
-#TEs = np.fromstring(binascii.a2b_uu(str(NIFTIimg_ABS.header['descrip'])[6:]),dtype=np.int16)/10.
+#TEs = np.fromstring(binascii.a2b_uu(str(NIFTIimg_ABS.header['descrip'])[6:]),dtype=np.int16)/100.
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS.set_sform(aff, code=0)
