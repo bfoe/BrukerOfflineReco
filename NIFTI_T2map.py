@@ -236,16 +236,18 @@ if np.count_nonzero(arr==0)<0.2*arr.size: #input image not masked yet
     IMGdata = IMGdata*mask
 else: #input image already masked
     mask =  abs(IMGdata [:,:,:,:]) > 0
-  
+    #mask_treshold=np.min(IMGdata[np.nonzero(IMGdata)])
+
 #colapse and filter mask
 mask = np.average(mask,axis=3)
 mask = mask > 0 
-mask = median_filter (mask, size = (3,3,3)) 
+mask = median_filter (mask, size = (3,3,1)) 
 mask = mask > 0.8  # takes out the 0.5 case of the median filter
 
 #increase resolution 2x
 print ('Increase resolution 2x')
 IMGdata = zoom(IMGdata,[2,2,1,1],order=2)
+#IMGdata [IMGdata<mask_treshold] = 0 #re-mask after zoom
 mask    = zoom(mask,[2,2,1],order=1) #must be order=1, artifacts otherwise
 mask    = mask != 0
 
@@ -283,9 +285,9 @@ data_R2map = np.reshape(data_R2map, (dim[0],dim[1],dim[2]))
 print ('Filter T2 map')
 s = 1.2; w = 4; t = (((w - 1)/2)-0.5)/s
 for i in range(dim[2]):
-   data_T2map[:,:,i] = median_filter  (data_T2map[:,:,i], size = (3,3))
+   data_T2map[:,:,i] = median_filter  (data_T2map[:,:,i], size = (4,4))
    data_T2map[:,:,i] = gaussian_filter(data_T2map[:,:,i], sigma=s, truncate=t)
-   data_R2map[:,:,i] = median_filter  (data_R2map[:,:,i], size = (3,3))
+   data_R2map[:,:,i] = median_filter  (data_R2map[:,:,i], size = (4,4))
    data_R2map[:,:,i] = gaussian_filter(data_R2map[:,:,i], sigma=s, truncate=t)
 
 #decrease resolution
