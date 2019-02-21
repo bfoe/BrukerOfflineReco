@@ -90,7 +90,7 @@ def FIT (x,y):
     bad_fit1=False
     initial_conditions=[max(y), (max(x)+min(x))/2]
     try: 
-        pars1,covar1 = curve_fit(expdecay,x,y,p0=initial_conditions,maxfev=50*(len(x)+1))
+        pars1,covar1 = curve_fit(expdecay,x,y,p0=initial_conditions,maxfev=100*(len(x)+1))
         if  (np.size(pars1)==1): bad_fit1=True
         if (np.size(covar1)==1): bad_fit1=True
     except RuntimeError: bad_fit1=True        
@@ -126,7 +126,7 @@ except: pass
 TKwindows.update()
     
 #intercatively choose input NIFTI file
-InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('*.nii','*.NII','*.nii.gz','*.NII.GZ'))])
+InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('MAGNT.nii.gz'))])
 if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
 InputFile = os.path.abspath(InputFile)
 TKwindows.update()
@@ -177,84 +177,93 @@ xstart=0; xend=int(IMGdata.shape[0]/N)
 ystart=0; yend=int(IMGdata.shape[1]/N)
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-if np.count_nonzero(arr==0)<0.2*arr.size: #input image not masked yet
-    # use noise in all 8 corners to establish threshold
-    avg[0]=np.mean(arr)
-    std[0]=np.std(arr)
-    tresh[0]=avg[0] + 4*std[0]
-    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-    ystart=0; yend=int(IMGdata.shape[1]/N)
-    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[1]=np.mean(arr)
-    std[1]=np.std(arr)
-    tresh[1]=avg[1] + 4*std[1]
-    xstart=0; xend=int(IMGdata.shape[0]/N)
-    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[2]=np.mean(arr)
-    std[2]=np.std(arr)
-    tresh[2]=avg[2] + 4*std[2]
-    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[3]=np.mean(arr)
-    std[3]=np.std(arr)
-    tresh[3]=avg[3] + 4*std[3]
-    xstart=0; xend=int(IMGdata.shape[0]/N)
-    ystart=0; yend=int(IMGdata.shape[1]/N)
-    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[4]=np.mean(arr)
-    std[4]=np.std(arr)
-    tresh[4]=avg[4] + 4*std[4]
-    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-    ystart=0; yend=int(IMGdata.shape[1]/N)
-    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
-    avg[5]=np.mean(arr)
-    std[5]=np.std(arr)
-    tresh[5]=avg[5] + 4*std[5]
-    xstart=0; xend=int(IMGdata.shape[0]/N)
-    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[6]=np.mean(arr)
-    std[6]=np.std(arr)
-    tresh[6]=avg[6] + 4*std[6]
-    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-    avg[7]=np.mean(arr)
-    std[7]=np.std(arr)
-    tresh[7]=avg[7] + 4*std[7]
-    mask_treshold=np.min(tresh)
-    mask =  abs(IMGdata [:,:,:,:]) > mask_treshold
-    IMGdata = IMGdata*mask
-else: #input image already masked
-    mask =  abs(IMGdata [:,:,:,:]) > 0
-    #mask_treshold=np.min(IMGdata[np.nonzero(IMGdata)])
+if np.count_nonzero(arr==0)>0.2*arr.size: #masked input image not OK
+    print ("ERROR: this looks like an image with noise mask"); 
+    sys.exit(1)    
 
-#colapse and filter mask
-mask = np.average(mask,axis=3)
-mask = mask > 0 
-mask = median_filter (mask, size = (3,3,1)) 
-mask = mask > 0.8  # takes out the 0.5 case of the median filter
+    
+# --------------------------- start doing something --------------------------
 
 #increase resolution 2x
 print ('Increase resolution 2x')
 IMGdata = zoom(IMGdata,[2,2,1,1],order=2)
-#IMGdata [IMGdata<mask_treshold] = 0 #re-mask after zoom
-mask    = zoom(mask,[2,2,1],order=1) #must be order=1, artifacts otherwise
-mask    = mask != 0
+
+# calculate mask
+# use noise in all 8 corners to establish threshold
+N=10 # use 10% at the corners of the FOV
+std_factor = 2 # thresh = avg + std_factor*std
+thresh=np.empty(shape=8,dtype=np.float)
+avg=np.empty(shape=8,dtype=np.float)
+std=np.empty(shape=8,dtype=np.float)
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[0]=np.mean(arr)
+std[0]=np.std(arr)
+thresh[0]=avg[0] + std_factor*std[0]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[1]=np.mean(arr)
+std[1]=np.std(arr)
+thresh[1]=avg[1] + std_factor*std[1]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[2]=np.mean(arr)
+std[2]=np.std(arr)
+thresh[2]=avg[2] + std_factor*std[2]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[3]=np.mean(arr)
+std[3]=np.std(arr)
+thresh[3]=avg[3] + std_factor*std[3]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[4]=np.mean(arr)
+std[4]=np.std(arr)
+thresh[4]=avg[4] + std_factor*std[4]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=0; yend=int(IMGdata.shape[1]/N)
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
+avg[5]=np.mean(arr)
+std[5]=np.std(arr)
+thresh[5]=avg[5] + std_factor*std[5]
+xstart=0; xend=int(IMGdata.shape[0]/N)
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[6]=np.mean(arr)
+std[6]=np.std(arr)
+thresh[6]=avg[6] + std_factor*std[6]
+xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
+avg[7]=np.mean(arr)
+std[7]=np.std(arr)
+thresh[7]=avg[7] + std_factor*std[7]
+mask_treshold=np.min(thresh)
+mask =  IMGdata [:,:,:,:] > mask_treshold
+#filter mask
+mask = median_filter (mask, size = (3,3,1,1)) #filter in 2D spatial dimension
+mask = mask > 0.8  # takes out the 0.5 case of the median filter
+mask = median_filter (mask, size = (1,1,1,5)) #filter in echo(TE) dimension
+mask = mask > 0.8  # takes out the 0.5 case of the median filter
+#appy mask
+IMGdata = IMGdata*mask
 
 # reshape flatten
 dim = IMGdata.shape
 IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
-mask    = np.reshape(mask,    (dim[0]*dim[1]*dim[2]))
     
 #T2map calculation 
 print ('Start fitting')
@@ -267,14 +276,13 @@ data_R2map = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
 progress_tag = dim[0]*dim[1]*dim[2]/70
 for i in range(dim[0]*dim[1]*dim[2]):
    if i%progress_tag==0: print ('.',end='')
-   if mask [i]>0:
-      nz = np.nonzero (IMGdata [i,:])  
-      if nz[0].shape[0]>=7:
-         TE_temp = TE[nz]
-         IMGdata_temp = IMGdata [i,:]
-         IMGdata_temp = IMGdata_temp [nz]      
-         data_T2map [i], T2err = FIT (TE_temp, IMGdata_temp)
-         if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
+   nz = np.nonzero (IMGdata [i,:])     
+   if nz[0].shape[0]>=7: #need at least 7 unmasked points
+      TE_temp = TE[nz]
+      IMGdata_temp = IMGdata [i,:]
+      IMGdata_temp = IMGdata_temp [nz]      
+      data_T2map [i], T2err = FIT (TE_temp, IMGdata_temp)
+      if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
 print ('')
 
 #reshape to original
@@ -283,11 +291,11 @@ data_R2map = np.reshape(data_R2map, (dim[0],dim[1],dim[2]))
 
 #filter 2D
 print ('Filter T2 map')
-s = 1.2; w = 4; t = (((w - 1)/2)-0.5)/s
+s = 1.2; w = 9; t = (((w - 1)/2)-0.5)/s
 for i in range(dim[2]):
-   data_T2map[:,:,i] = median_filter  (data_T2map[:,:,i], size = (4,4))
+   data_T2map[:,:,i] = median_filter  (data_T2map[:,:,i], size = (3,3))
    data_T2map[:,:,i] = gaussian_filter(data_T2map[:,:,i], sigma=s, truncate=t)
-   data_R2map[:,:,i] = median_filter  (data_R2map[:,:,i], size = (4,4))
+   data_R2map[:,:,i] = median_filter  (data_R2map[:,:,i], size = (3,3))
    data_R2map[:,:,i] = gaussian_filter(data_R2map[:,:,i], sigma=s, truncate=t)
 
 #decrease resolution
