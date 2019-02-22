@@ -1,5 +1,5 @@
 #
-# calculates maps of T2 decay
+# calculates maps of T2 decay from 4D NIFTI
 #      
 #
 # ----- VERSION HISTORY -----
@@ -49,12 +49,13 @@ if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
    from scipy_extract import zoom
    from scipy_extract import median_filter
    from scipy_extract import gaussian_filter 
-   #------------ ai ai ai --------------
+   from scipy_extract import curve_fit 
 else: # running native python
    from scipy.ndimage import zoom 
    from scipy.ndimage import median_filter 
    from scipy.ndimage import gaussian_filter 
    from scipy.optimize import curve_fit   
+
 
 TK_installed=True
 try: from tkFileDialog import askopenfilename # Python 2
@@ -100,19 +101,19 @@ def FIT (x,y,T2_clip,R2_clip):
     else: T2=pars1[1]; T2err=covar1[1,1];                   #fit OK
     return T2, T2err
 
-def worker(start,end,TE,IMGdata,p,T2_clip,R2_clip):
+def worker(TE,IMGdata,p,T2_clip,R2_clip):
     warnings.filterwarnings("ignore")
-    data_T2map = np.zeros((end-start),dtype=np.float32)
-    data_R2map = np.zeros((end-start),dtype=np.float32)    
-    for i in range(start,end):
+    data_T2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)
+    data_R2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
+    for i in range(IMGdata.shape[0]):
        if i%p==0: print ('.',end='')
        nz = np.nonzero (IMGdata [i,:])     
        if nz[0].shape[0]>=7: #need at least 7 unmasked points
           TE_temp = TE[nz]
           IMGdata_temp = IMGdata [i,:]
           IMGdata_temp = IMGdata_temp [nz]      
-          data_T2map [i-start], T2err = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
-          if data_T2map[i-start]>0: data_R2map [i-start] = 1000./data_T2map [i-start]
+          data_T2map [i], T2err = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
+          if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
     
 if __name__ == '__main__':
@@ -297,7 +298,7 @@ if __name__ == '__main__':
         start = i*workpiece
         end   = start+workpiece
         if end > IMGdata.shape[0]: end = IMGdata.shape[0]  
-        return_vals.append(p.apply_async(worker, args = (start, end, TE, IMGdata, progress_tag, T2_clip, R2_clip)))
+        return_vals.append(p.apply_async(worker, args = (TE, IMGdata[start:end,:], progress_tag, T2_clip, R2_clip)))
     p.close()
     p.join()    
     #get results    
