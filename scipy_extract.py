@@ -633,7 +633,7 @@ def leastsq(func, x0, args=(), Dfun=None, full_output=0,
     if full_output:
         cov_x = None
         if info in [1, 2, 3, 4]:
-            from np.dual import inv
+            from numpy.dual import inv
             perm = np.take(np.eye(n), retval[1]['ipvt'] - 1, 0)
             r = np.triu(np.transpose(retval[1]['fjac'])[:n, :])
             R = np.dot(r, perm)
