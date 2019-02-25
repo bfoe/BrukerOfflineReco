@@ -185,8 +185,8 @@ if __name__ == '__main__':
     if TE.shape[0]!=IMGdata.shape[3]:
         print ("ERROR: number of TE's in header unequal data dimension "); 
         sys.exit(1)
-    if np.unique(TE).shape[0]<7:
-        print ("ERROR: need at least 7 unique TE's"); 
+    if np.unique(TE).shape[0]<5:
+        print ("ERROR: need at least 5 unique TE's"); 
         sys.exit(1)
     if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
         print ("ERROR: this looks like a Phase Image"); 
@@ -365,16 +365,24 @@ if __name__ == '__main__':
     mask = median_filter (mask, size = (1,1,1,5)) #filter in echo(TE) dimension
     mask = mask > 0
     #appy mask
-    IMGdata = IMGdata*mask
+    IMGdata = IMGdata*mask   
     # collapse mask
     mask = np.sum(mask, axis=3)
-    mask = mask >= 7 # at least 7 good echoes
-
+    mask = mask >= 5 # at least 5 good echoes
+    #save masked images to check visually     
+    '''
+    IMGtest = IMGdata
+    #IMGtest[:,:,:,:] *= mask[:,:,:,None]
+    aff = np.eye(4)
+    IMG = nib.Nifti1Image(IMGtest, aff)
+    nib.save(IMG, os.path.join(dirname,basename+'_testmask.nii.gz'))
+    '''
+    
     # reshape flatten
     dim = IMGdata.shape
     IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
     mask = np.reshape(mask, (dim[0]*dim[1]*dim[2]))
-    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 7 good echoes)
+    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 5 good echoes)
     
     #T2map calculation 
     print ('Start fitting using', cores, 'cores')
