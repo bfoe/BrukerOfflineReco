@@ -89,32 +89,39 @@ def expdecay(x,a,T2):
     return a* np.exp(-x/T2)
 def FIT (x,y,T2_clip,R2_clip): 
     bad_fit1=False
-    initial_conditions=[max(y), (max(x)+min(x))/2]
+    initial_conditions=[np.max(y), (np.max(x)+np.min(x))/2]
     try: 
         pars1,covar1 = curve_fit(expdecay,x,y,p0=initial_conditions,maxfev=100*(len(x)+1))
         if  (np.size(pars1)==1): bad_fit1=True
         if (np.size(covar1)==1): bad_fit1=True
     except RuntimeError: bad_fit1=True        
-    if bad_fit1: T2=0;T2err=0;                              #fit failed
-    elif pars1[1]>T2_clip: T2=T2_clip; T2err=covar1[1,1];   #above clip value
-    elif pars1[1]<R2_clip: T2=R2_clip; T2err=covar1[1,1];   #above clip value
-    else: T2=pars1[1]; T2err=covar1[1,1];                   #fit OK
-    return T2, T2err
+    if bad_fit1: T2=0;T2err=0; A=0; Aerr=0                                            #fit failed
+    elif pars1[1]>T2_clip: T2=T2_clip; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0] #above clip value
+    elif pars1[1]<R2_clip: T2=R2_clip; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0] #above clip value
+    else: T2=pars1[1]; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0]                 #fit OK
+    return T2, T2err, A, Aerr
 
-def worker(TE,IMGdata,p,T2_clip,R2_clip):
+def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
     warnings.filterwarnings("ignore")
     data_T2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)
     data_R2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
     for i in range(IMGdata.shape[0]):
        if i%p==0: print ('.',end='')
        nz = np.nonzero (IMGdata [i,:])     
-       if nz[0].shape[0]>=7: #need at least 7 unmasked points
-          TE_temp = TE[nz]
-          IMGdata_temp = IMGdata [i,:]
-          IMGdata_temp = IMGdata_temp [nz]      
-          data_T2map [i], T2err = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
-          if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
+       TE_temp = TE[nz]
+       IMGdata_temp = IMGdata [i,:]
+       IMGdata_temp = IMGdata_temp [nz]      
+       data_T2map [i], T2arr, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
+       if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
+
+def worker_zoom(IMGdata,p):
+    z=2
+    zoomed = np.zeros((IMGdata.shape[0]*z,IMGdata.shape[1]*z,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
+    for i in range(IMGdata.shape[3]):
+       if i%p==0: print ('.',end='')
+       zoomed[:,:,:,i] = zoom(IMGdata[:,:,:,i],[z,z,1],order=2)
+    return zoomed
     
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller 
@@ -201,9 +208,93 @@ if __name__ == '__main__':
         
     # --------------------------- start doing something --------------------------
 
+    #correct first echo
+    #
+    #problem description:
+    # In 2D sequences used for T2 quantification the signal amplitude
+    # of the first echo often is considerably below what would be expected for
+    # an exponential decay. Actually it's not the first echo that is too low, 
+    # but the following echoes that are higher, this due to an additional
+    # contribution arising from stimulated echos at the borders of the slice 
+    # selection profile where the refocusing angle is below 180. RF pulses
+    # wit well behaved slice profiles like "hermitian" minimize the problem, 
+    # not so well behaved "gauss" pulses aggravate the effect. 3D sequences
+    # intrinsically avoid this kind of problem altogether. T2* sequences do not
+    # refocus echos by RF, so no problem there either even not if T2* is 2D.
+    #
+    #elaborate solutions to this problem:
+    # https://www.ncbi.nlm.nih.gov/pubmed/22012743
+    # https://www.ncbi.nlm.nih.gov/pubmed/24648387
+    # 
+    #How the below algorithm worx:
+    # the solutions proposed in the above publications require information of
+    # the applied pulse sequence and it's parameters. We implemented a generic
+    # solution based on a simple correction of the amplitude of the first echo,
+    # which consists of the following steps:
+    # 1) analysis of the histogram of the last echo image to find the 1% 
+    #    highest intensity points (these are are the regions with the longest T2).
+    # 2) calculate the T2 fit from the average of these points.
+    # 3) back calculate the signal of the first echo, compare to the actual 
+    #    value and calculate a correction factor.
+    # 4) apply the correction to the first echo image only.
+    # in step 2) we also estimate the normalized RMS error and only apply 4)
+    # under certain quality constraints.    
+    #
+    #
+    # analyze histogram to find 1% higest intensity points of last echo image
+    n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
+    steps=np.sqrt(n_points); start=0; fin=np.max(IMGdata [:,:,:,-1])
+    xbins =  np.linspace(start,fin,steps)
+    ybins, binedges = np.histogram(IMGdata [:,:,:,-1], bins=xbins)
+    i=len(ybins)-1
+    points=0; thresh = 0
+    while i>0:
+       points += ybins[i]       
+       thresh = xbins[i]   
+       if points >  n_points*0.01: #1%
+          i=1
+       i -= 1
+    #get longT2 points       
+    longT2_idx = IMGdata [:,:,:,-1]>thresh    
+    longT2_data = np.average(IMGdata[longT2_idx,:],axis=0)
+    #fit longT2 points
+    longT2_value, T2err, A, Aerr = FIT (TE[1:-1], longT2_data[1:-1], np.max(TE)*100, np.min(TE)*0.01)
+    #estimate normalized root mean square error
+    rmse=0
+    for i in range(1,TE.shape[0]):
+       rmse += ((expdecay(TE[i],A,longT2_value)-longT2_data[i])/longT2_data[i])**2
+    rmse = np.sqrt(rmse/(TE.shape[0]-1))
+    #do correction
+    first_echo_expected = expdecay(TE[0],A,longT2_value)
+    corr = first_echo_expected/longT2_data[0]    
+    if rmse>0.05: #5% RMS error limit
+       print ('1st echo correction skipped (RMS error too high)')
+    elif corr<=1:
+       print ('1st echo correction skipped (correction factor < 1.0)')    
+    else: #do correction
+       print ('1st echo correction factor is %0.2f' % corr)
+       IMGdata [:,:,:,0] *= corr
+    
     #increase resolution 2x
-    print ('Increase resolution 2x')
-    IMGdata = zoom(IMGdata,[2,2,1,1],order=2)
+    #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
+    cores_min = min (cores,IMGdata.shape[3])    
+    print ('Increase resolution 2x using',cores_min,'cores')
+    p = mp.Pool(cores_min)
+    return_vals=[]
+    progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
+    for i in range(cores_min):
+        workpiece=int(math.ceil(float(IMGdata.shape[3])/float(cores_min)))
+        start = i*workpiece
+        end   = start+workpiece
+        if end > IMGdata.shape[3]: end = IMGdata.shape[3]  
+        return_vals.append(p.apply_async(worker_zoom, args = (IMGdata[:,:,:,start:end], progress_tag)))
+    p.close()
+    p.join()    
+    #get results  
+    IMGdata = return_vals[0].get()     
+    for i in range(1,cores_min):
+        IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
+    print ('') 
 
     # calculate mask
     # use noise in all 8 corners to establish threshold
@@ -275,11 +366,16 @@ if __name__ == '__main__':
     mask = mask > 0
     #appy mask
     IMGdata = IMGdata*mask
+    # collapse mask
+    mask = np.sum(mask, axis=3)
+    mask = mask >= 7 # at least 7 good echoes
 
     # reshape flatten
     dim = IMGdata.shape
     IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
-        
+    mask = np.reshape(mask, (dim[0]*dim[1]*dim[2]))
+    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 7 good echoes)
+    
     #T2map calculation 
     print ('Start fitting using', cores, 'cores')
     
@@ -290,23 +386,29 @@ if __name__ == '__main__':
     R2_clip_factor=1/3. # factor of min(TE) where to start clipping R2
     T2_clip = np.max(TE)*T2_clip_factor
     R2_clip = np.min(TE)*R2_clip_factor
-    data_T2map = np.zeros((0),dtype=np.float32)
-    data_R2map = np.zeros((0),dtype=np.float32)    
-    progress_tag = dim[0]*dim[1]*dim[2]/70
+    progress_tag = IMGdata.shape[0]/70
     for i in range(cores):
         workpiece=int(math.ceil(float(IMGdata.shape[0])/float(cores)))
         start = i*workpiece
         end   = start+workpiece
         if end > IMGdata.shape[0]: end = IMGdata.shape[0]  
-        return_vals.append(p.apply_async(worker, args = (TE, IMGdata[start:end,:], progress_tag, T2_clip, R2_clip)))
+        return_vals.append(p.apply_async(worker_curvefit, args = (TE, IMGdata[start:end,:], progress_tag, T2_clip, R2_clip)))
     p.close()
     p.join()    
-    #get results    
+    #get results  
+    temp_T2map = np.zeros((0),dtype=np.float32)
+    temp_R2map = np.zeros((0),dtype=np.float32)        
     for i in range(cores):
-        data_T2map = np.concatenate ((data_T2map, return_vals[i].get()[0]))
-        data_R2map = np.concatenate ((data_R2map, return_vals[i].get()[1]))
+        temp_T2map = np.concatenate ((temp_T2map, return_vals[i].get()[0]))
+        temp_R2map = np.concatenate ((temp_R2map, return_vals[i].get()[1]))
     print ('')        
 
+    #undo vector reduction
+    data_T2map = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
+    data_R2map = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)     
+    data_T2map[mask] = temp_T2map[:] # undo vector reduction 
+    data_R2map[mask] = temp_R2map[:] # undo vector reduction    
+    
     #reshape to original
     data_T2map = np.reshape(data_T2map, (dim[0],dim[1],dim[2]))
     data_R2map = np.reshape(data_R2map, (dim[0],dim[1],dim[2]))
