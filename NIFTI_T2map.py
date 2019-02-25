@@ -382,7 +382,7 @@ if __name__ == '__main__':
     dim = IMGdata.shape
     IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
     mask = np.reshape(mask, (dim[0]*dim[1]*dim[2]))
-    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 5 good echoes)
+    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 7 good echoes)
     
     #T2map calculation 
     print ('Start fitting using', cores, 'cores')
