@@ -185,8 +185,8 @@ if __name__ == '__main__':
     if TE.shape[0]!=IMGdata.shape[3]:
         print ("ERROR: number of TE's in header unequal data dimension "); 
         sys.exit(1)
-    if np.unique(TE).shape[0]<5:
-        print ("ERROR: need at least 5 unique TE's"); 
+    if np.unique(TE).shape[0]<7:
+        print ("ERROR: need at least 7 unique TE's"); 
         sys.exit(1)
     if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
         print ("ERROR: this looks like a Phase Image"); 
@@ -368,7 +368,7 @@ if __name__ == '__main__':
     IMGdata = IMGdata*mask   
     # collapse mask
     mask = np.sum(mask, axis=3)
-    mask = mask >= 5 # at least 5 good echoes
+    mask = mask >= 7 # at least 7 good echoes
     #save masked images to check visually     
     '''
     IMGtest = IMGdata
