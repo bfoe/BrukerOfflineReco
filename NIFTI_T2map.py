@@ -299,7 +299,7 @@ if __name__ == '__main__':
     # calculate mask
     # use noise in all 8 corners to establish threshold
     N=10 # use 10% at the corners of the FOV
-    std_factor = 2 # thresh = avg + std_factor*std
+    std_factor = 4 # thresh = avg + std_factor*std
     thresh=np.empty(shape=8,dtype=np.float)
     avg=np.empty(shape=8,dtype=np.float)
     std=np.empty(shape=8,dtype=np.float)
