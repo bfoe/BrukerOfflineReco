@@ -111,7 +111,7 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
        TE_temp = TE[nz]
        IMGdata_temp = IMGdata [i,:]
        IMGdata_temp = IMGdata_temp [nz]      
-       data_T2map [i], T2arr, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
+       data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
        if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
 
@@ -299,7 +299,7 @@ if __name__ == '__main__':
     # calculate mask
     # use noise in all 8 corners to establish threshold
     N=10 # use 10% at the corners of the FOV
-    std_factor = 4 # thresh = avg + std_factor*std
+    std_factor = 2 # thresh = avg + std_factor*std
     thresh=np.empty(shape=8,dtype=np.float)
     avg=np.empty(shape=8,dtype=np.float)
     std=np.empty(shape=8,dtype=np.float)
