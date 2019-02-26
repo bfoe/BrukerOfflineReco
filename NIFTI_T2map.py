@@ -107,12 +107,18 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
     data_R2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
     for i in range(IMGdata.shape[0]):
        if i%p==0: print ('.',end='')
+       #filter     
+       zeros = np.nonzero (IMGdata[i,:]==0)[0]
+       zeros = np.append  (zeros,IMGdata.shape[1])      
+       IMGdata[i,zeros[0]:IMGdata.shape[1]]  = 0
+       #extract
        nz = np.nonzero (IMGdata [i,:])     
        TE_temp = TE[nz]
-       IMGdata_temp = IMGdata [i,:]
-       IMGdata_temp = IMGdata_temp [nz]      
-       data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
-       if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
+       IMGdata_temp = IMGdata [i,:][nz]
+       #fit
+       if TE_temp.shape[0]>5:
+          data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
+          if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
 
 def worker_zoom(IMGdata,p):
@@ -125,7 +131,7 @@ def worker_zoom(IMGdata,p):
     
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller 
-    cores=mp.cpu_count()-1; cores = max (1,cores) #set number of cores     
+    cores=mp.cpu_count()-1; cores = max (1,cores) #set number of cores 
     #general initialization stuff  
     space=' '; slash='/'; 
     if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -185,8 +191,8 @@ if __name__ == '__main__':
     if TE.shape[0]!=IMGdata.shape[3]:
         print ("ERROR: number of TE's in header unequal data dimension "); 
         sys.exit(1)
-    if np.unique(TE).shape[0]<7:
-        print ("ERROR: need at least 7 unique TE's"); 
+    if np.unique(TE).shape[0]<5:
+        print ("ERROR: need at least 5 unique TE's"); 
         sys.exit(1)
     if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
         print ("ERROR: this looks like a Phase Image"); 
@@ -274,7 +280,7 @@ if __name__ == '__main__':
     else: #do correction
        print ('1st echo correction factor is %0.2f' % corr)
        IMGdata [:,:,:,0] *= corr
-    
+
     #increase resolution 2x
     #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
     cores_min = min (cores,IMGdata.shape[3])    
@@ -359,34 +365,23 @@ if __name__ == '__main__':
     avg[7]=np.mean(arr)
     std[7]=np.std(arr)
     thresh[7]=avg[7] + std_factor*std[7]
-    mask_treshold=np.min(thresh)
-    mask =  IMGdata [:,:,:,:] > mask_treshold
-    #filter mask
-    mask = median_filter (mask, size = (1,1,1,5)) #filter in echo(TE) dimension
-    mask = mask > 0
-    #appy mask
-    IMGdata = IMGdata*mask   
-    # collapse mask
-    mask = np.sum(mask, axis=3)
-    mask = mask >= 7 # at least 7 good echoes
-    #save masked images to check visually     
-    '''
-    IMGtest = IMGdata
-    #IMGtest[:,:,:,:] *= mask[:,:,:,None]
-    aff = np.eye(4)
-    IMG = nib.Nifti1Image(IMGtest, aff)
-    nib.save(IMG, os.path.join(dirname,basename+'_testmask.nii.gz'))
-    '''
+    mask_treshold=np.min(thresh)  
     
     # reshape flatten
     dim = IMGdata.shape
-    IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
-    mask = np.reshape(mask, (dim[0]*dim[1]*dim[2]))
-    IMGdata = IMGdata [mask,:] # vector reduction (only points with at least 7 good echoes)
+    IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))  
+
+    #apply mask
+    mask =  IMGdata > mask_treshold 
+    IMGdata = IMGdata*mask
+
+    # vector reduction
+    mask = np.sum(mask, axis=1)
+    mask = mask >= 5 # at least 5 good echoes
+    IMGdata = IMGdata [mask,:]
     
-    #T2map calculation 
+    #T2map calculation  
     print ('Start fitting using', cores, 'cores')
-    
     #set up multiprocessing
     p = mp.Pool(cores)
     return_vals=[]
@@ -433,7 +428,7 @@ if __name__ == '__main__':
     print ('Decrease resolution 2x')
     data_T2map = zoom(data_T2map,[0.5,0.5,1],order=1)
     data_R2map = zoom(data_R2map,[0.5,0.5,1],order=1)
-             
+      
     #transform to int
     max_T2 = np.amax(data_T2map);
     data_T2map *= 32767./max_T2
