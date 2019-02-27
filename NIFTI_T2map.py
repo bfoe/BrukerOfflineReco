@@ -116,7 +116,7 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
        TE_temp = TE[nz]
        IMGdata_temp = IMGdata [i,:][nz]
        #fit
-       if TE_temp.shape[0]>5:
+       if TE_temp.shape[0]>3:
           data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
           if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
@@ -377,7 +377,7 @@ if __name__ == '__main__':
 
     # vector reduction
     mask = np.sum(mask, axis=1)
-    mask = mask >= 5 # at least 5 good echoes
+    mask = mask >= 3 # at least 5 good echoes
     IMGdata = IMGdata [mask,:]
     
     #T2map calculation  
