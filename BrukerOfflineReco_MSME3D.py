@@ -48,7 +48,13 @@ import binascii
 from getopt import getopt
 import numpy as np
 import nibabel as nib
-
+if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
+   from scipy_extract import median_filter
+   from scipy_extract import gaussian_filter 
+else: # running native python
+   from scipy.ndimage import median_filter 
+   from scipy.ndimage import gaussian_filter 
+   
 pyfftw_installed = True
 try: 
     import pyfftw
@@ -321,6 +327,43 @@ for i in range(0,FIDdata.shape[1]): ph[:,i,:,:] -= float(i-int(FIDdata.shape[1]/
 for j in range(0,FIDdata.shape[2]): ph[:,:,j,:] -= float(j-int(FIDdata.shape[2]/2))*phase_step2
 FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
+
+
+#calc phase correction
+#
+# the reason for this is that eddy currents produce a
+# shift in the images along (mainly) in readout direction
+# which depends on the echo number, as a result uncorrected
+# images do not allign varying the echo number
+# this is uncritical for the average magnitude image
+# but does produce bad artifacts when trying to fit T2 maps
+#
+# this filter corrcts for slow varying phase error in k-space
+# which in image space relates basically to correcting the 
+# object's position error
+# (linear phase in time domain = shift in frequency domain)
+#
+#
+AVG = np.average(FIDdata,axis=3)            #complex average all echoes
+PH = FIDdata[:,:,:,:]/AVG[:,:,:,None]       #complex division = phase difference
+PH = np.angle(PH)                           #calc phase angle
+print('.', end='') #progress indicator
+PH = median_filter(PH, size = (5,5,5,1))    #median filter 1
+print('.', end='') #progress indicator
+PH = median_filter(PH, size = (5,5,5,1))    #median filter 2
+print('.', end='') #progress indicator
+s = 7; w = 9; t = (((w - 1)/2)-0.5)/s
+for i in range(dim[3]):
+   PH[:,:,:,i] = gaussian_filter(PH[:,:,:,i], sigma=s, truncate=t)
+print('.', end='') #progress indicator
+FIDdata [:,:,:,:] = np.abs(FIDdata) * np.exp(1j*(np.angle(FIDdata)-PH)) #apply correction
+#save images to check visually
+#aff = np.eye(4)
+#IMG = nib.Nifti1Image(PH, aff)
+#nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH.nii.gz'))
+print('.', end='') #progress indicator
+AVG = 0; PH = 0 #free memory
+
 
 #zero fill
 zero_fill=2
