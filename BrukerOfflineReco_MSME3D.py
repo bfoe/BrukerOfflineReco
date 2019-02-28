@@ -356,9 +356,9 @@ for j in range (3):
        print('.', end='') #progress indicator    
     FIDdata [:,:,:,:] = np.abs(FIDdata) * np.exp(1j*(np.angle(FIDdata)-PH)) #apply correction
     #save images to check visually
-    aff = np.eye(4)
-    IMG = nib.Nifti1Image(PH, aff)
-    nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH'+str(j+1)+'.nii.gz'))
+    #aff = np.eye(4)
+    #IMG = nib.Nifti1Image(PH, aff)
+    #nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH'+str(j+1)+'.nii.gz'))
     print('.', end='') #progress indicator
 AVG = 0; PH = 0 #free memory
 
