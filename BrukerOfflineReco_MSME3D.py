@@ -347,8 +347,7 @@ print('.', end='') #progress indicator
 for j in range (3):
     AVG = np.average(FIDdata[:,:,:,:],axis=3)   #complex average all echoes
     PH = FIDdata[:,:,:,:]/AVG[:,:,:,None]       #complex division = phase difference
-    PH = np.angle(PH)                           #calc phase angle
-    print('.', end='') #progress indicator    
+    PH = np.angle(PH)                           #calc phase angle   
     for i in range(dim[3]):    
        PH[:,:,:,i] = median_filter  (PH[:,:,:,i], size = (5,5,5))    #median filter 1   
        PH[:,:,:,i] = median_filter  (PH[:,:,:,i], size = (5,5,5))    #median filter 2   
@@ -359,7 +358,6 @@ for j in range (3):
     #aff = np.eye(4)
     #IMG = nib.Nifti1Image(PH, aff)
     #nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH'+str(j+1)+'.nii.gz'))
-    print('.', end='') #progress indicator
 AVG = 0; PH = 0 #free memory
 
 
