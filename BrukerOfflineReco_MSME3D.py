@@ -44,7 +44,6 @@ try: import win32gui, win32console
 except: pass #silent
 import sys
 import os
-import binascii
 from getopt import getopt
 import numpy as np
 import nibabel as nib
@@ -276,6 +275,9 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
    METHODdata["PVM_EncZfAccel1"] != 1 or METHODdata["PVM_EncZfAccel2"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
+if METHODdata["constNEchoes"] != "Yes"]:
+    print ('ERROR: non constNEchoes not implemented'); 
+    sys.exit(1)    
 if METHODdata["PVM_NEchoImages"] != METHODdata["NEchoes"]:
     print ('ERROR: unequal #echoes'); 
     sys.exit(1)   
@@ -328,7 +330,8 @@ for j in range(0,FIDdata.shape[2]): ph[:,:,j,:] -= float(j-int(FIDdata.shape[2]/
 FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
-
+'''
+should not be nescessary for 3D acquisitions
 #calc phase correction
 #
 # the reason for this is that eddy currents produce a
@@ -359,7 +362,7 @@ for j in range (3):
     #IMG = nib.Nifti1Image(PH, aff)
     #nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH'+str(j+1)+'.nii.gz'))
 AVG = 0; PH = 0 #free memory
-
+'''
 
 #zero fill
 zero_fill=2
@@ -734,7 +737,6 @@ print('.', end='') #progress indicator
 IMGdata=0 # free memory
 
 #save NIFTI
-TEs = (TEs*100).astype(np.int16) # convert to int, precision 0.1
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_ABS.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_ABS.shape[1]/2)*aff[1,1]
@@ -745,19 +747,19 @@ NIFTIimg_AVG.header.set_xyzt_units(3, 8)
 NIFTIimg_AVG.set_sform(aff, code=0)
 NIFTIimg_AVG.set_qform(aff, code=1)
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_ABS.header['descrip'] = "TEs = "+binascii.b2a_uu (TEs.tostring())
-#how to recover the information:
-#TEs = np.fromstring(binascii.a2b_uu(str(NIFTIimg_ABS.header['descrip'])[6:]),dtype=np.int16)/100.
+NIFTIimg_ABS.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS.set_sform(aff, code=0)
 NIFTIimg_ABS.set_qform(aff, code=1)
 NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
+NIFTIimg_ABS_masked.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS_masked.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS_masked.set_sform(aff, code=0)
 NIFTIimg_ABS_masked.set_qform(aff, code=1)
 NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH[:,:,:], aff)
+NIFTIimg_PH.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
 NIFTIimg_PH.header.set_xyzt_units(3, 8)
 NIFTIimg_PH.set_sform(aff, code=0)

@@ -44,7 +44,6 @@ except: pass #silent
 from math import ceil, floor
 import sys
 import os
-import binascii
 import numpy as np
 import nibabel as nib
 if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
@@ -216,9 +215,12 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
    METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
+if METHODdata["constNEchoes"] != "Yes"]:
+    print ('ERROR: non constNEchoes not implemented'); 
+    sys.exit(1)
 if METHODdata["PVM_NEchoImages"] != METHODdata["NEchoes"]:
     print ('ERROR: unequal #echoes'); 
-    sys.exit(1)   
+    sys.exit(1)         
 NEchoes = METHODdata["NEchoes"]
 TEs = METHODdata["EffectiveTE"].astype(np.float32)
 
@@ -615,7 +617,6 @@ IMGdata_AVG = IMGdata_AVG.astype(np.int16)
 print('.', end='') #progress indicator
 
 #save NIFTI
-TEs = (TEs*100).astype(np.int16) # convert to int, precision 0.1
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
@@ -626,21 +627,19 @@ NIFTIimg_AVG.header.set_xyzt_units(3, 8)
 NIFTIimg_AVG.set_sform(aff, code=0)
 NIFTIimg_AVG.set_qform(aff, code=1)
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_ABS.header['descrip'] = "TEs = "+binascii.b2a_uu (TEs.tostring())
-#how to recover the information:
-#TEs = np.fromstring(binascii.a2b_uu(str(NIFTIimg_ABS.header['descrip'])[6:]),dtype=np.int16)/100.
+NIFTIimg_ABS.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS.set_sform(aff, code=0)
 NIFTIimg_ABS.set_qform(aff, code=1)
 NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
-NIFTIimg_ABS_masked.header['descrip'] = "TEs = "+binascii.b2a_uu (TEs.tostring())
+NIFTIimg_ABS_masked.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS_masked.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS_masked.set_sform(aff, code=0)
 NIFTIimg_ABS_masked.set_qform(aff, code=1)
 NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
-NIFTIimg_PH.header['descrip'] = "TEs = "+binascii.b2a_uu (TEs.tostring())
+NIFTIimg_PH.header['descrip'] = "TE1 = "+str(TEs[0])
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
 NIFTIimg_PH.header.set_xyzt_units(3, 8)
 NIFTIimg_PH.set_sform(aff, code=0)

@@ -40,7 +40,6 @@ from math import ceil, floor
 import sys
 import os
 import math
-import binascii
 import warnings
 import numpy as np
 import nibabel as nib
@@ -179,17 +178,18 @@ if __name__ == '__main__':
     xyzt_units2  = img.header.get_xyzt_units()[1]
     sform = int(img.header['sform_code'])
     qform = int(img.header['qform_code'])
-    TE_str = img.header['descrip'] 
-    try: TE = np.fromstring(binascii.a2b_uu(str(TE_str)[6:]),dtype=np.int16)/100.
+    TE_str = str(img.header['descrip'])
+    try: TE1 = float(TE_str[6:])
     except: print ("ERROR: parsing TE information from header"); sys.exit(1)
-
-
+    TE = np.linspace(TE1,TE1*(IMGdata.shape[-1]),num=IMGdata.shape[-1],endpoint=True)
+    TE_str = np.array2string(TE,max_line_width=1000)
+    TE_str = TE_str.replace('.]','').replace(']','').replace('[','')
+    TE_str = TE_str.replace('. ',' ').replace('  ',' ')
+    print ("TE's ="+TE_str)
+    
     #check some stuff
     if len(IMGdata.shape) != 4:
         print ('ERROR: 4D NIFTI expected, 3D NIFTI found, this is probably not a multiecho file'); 
-        sys.exit(1)
-    if TE.shape[0]!=IMGdata.shape[3]:
-        print ("ERROR: number of TE's in header unequal data dimension "); 
         sys.exit(1)
     if np.unique(TE).shape[0]<5:
         print ("ERROR: need at least 5 unique TE's"); 
@@ -428,7 +428,7 @@ if __name__ == '__main__':
     print ('Decrease resolution 2x')
     data_T2map = zoom(data_T2map,[0.5,0.5,1],order=1)
     data_R2map = zoom(data_R2map,[0.5,0.5,1],order=1)
-      
+
     #transform to int
     max_T2 = np.amax(data_T2map);
     data_T2map *= 32767./max_T2
