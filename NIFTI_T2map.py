@@ -127,7 +127,8 @@ def worker_zoom(IMGdata,p):
        if i%p==0: print ('.',end='')
        zoomed[:,:,:,i] = zoom(IMGdata[:,:,:,i],[z,z,1],order=2)
     return zoomed
-    
+
+
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller 
     cores=mp.cpu_count()-1; cores = max (1,cores) #set number of cores 
@@ -178,7 +179,7 @@ if __name__ == '__main__':
     xyzt_units2  = img.header.get_xyzt_units()[1]
     sform = int(img.header['sform_code'])
     qform = int(img.header['qform_code'])
-    TE_str = str(img.header['descrip'])
+    TE_str = str(img.header['descrip'])   
     try: TE1 = float(TE_str[6:])
     except: print ("ERROR: parsing TE information from header"); sys.exit(1)
     TE = np.linspace(TE1,TE1*(IMGdata.shape[-1]),num=IMGdata.shape[-1],endpoint=True)
@@ -283,25 +284,36 @@ if __name__ == '__main__':
 
     #increase resolution 2x
     #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
-    cores_min = min (cores,IMGdata.shape[3])    
-    print ('Increase resolution 2x using',cores_min,'cores')
-    p = mp.Pool(cores_min)
-    return_vals=[]
-    progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
-    for i in range(cores_min):
-        workpiece=int(math.ceil(float(IMGdata.shape[3])/float(cores_min)))
-        start = i*workpiece
-        end   = start+workpiece
-        if end > IMGdata.shape[3]: end = IMGdata.shape[3]  
-        return_vals.append(p.apply_async(worker_zoom, args = (IMGdata[:,:,:,start:end], progress_tag)))
-    p.close()
-    p.join()    
-    #get results  
-    IMGdata = return_vals[0].get()     
-    for i in range(1,cores_min):
-        IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
-    print ('') 
-
+    if np.prod(IMGdata.shape)>1000000000: #single process with progress indicator
+        print ('Increase resolution 2x')    
+        zoomed = np.zeros((IMGdata.shape[0]*2,IMGdata.shape[1]*2,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
+        for i in range(IMGdata.shape[3]):
+            print ('.',end='') #progress indicator    
+            zoomed [:,:,:,i] = zoom(IMGdata[:,:,:,i],[2,2,1],order=2) #simple non-mp code
+        print ('')
+        IMGdata = zoomed    
+        zoomed=0 #free memory    
+    else: #multiprocessing
+        cores_min = min (cores,IMGdata.shape[3])  
+        print ('Increase resolution 2x using',cores_min,'cores')
+        p = mp.Pool(cores_min)
+        return_vals=[]
+        progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
+        for i in range(cores_min):
+            workpiece=int(math.ceil(float(IMGdata.shape[3])/float(cores_min)))
+            start = i*workpiece
+            end   = start+workpiece
+            if end > IMGdata.shape[3]: end = IMGdata.shape[3]  
+            return_vals.append(p.apply_async(worker_zoom, args = (IMGdata[:,:,:,start:end], progress_tag)))
+        IMGdata = 0 # free memory
+        p.close()
+        p.join()    
+        #get results  
+        IMGdata = return_vals[0].get()     
+        for i in range(1,cores_min):
+            IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
+        print ('') 
+    
     # calculate mask
     # use noise in all 8 corners to establish threshold
     N=10 # use 10% at the corners of the FOV
@@ -377,7 +389,7 @@ if __name__ == '__main__':
 
     # vector reduction
     mask = np.sum(mask, axis=1)
-    mask = mask >= 3 # at least 5 good echoes
+    mask = mask >= 3 # at least 3 good echoes
     IMGdata = IMGdata [mask,:]
     
     #T2map calculation  
@@ -396,6 +408,7 @@ if __name__ == '__main__':
         end   = start+workpiece
         if end > IMGdata.shape[0]: end = IMGdata.shape[0]  
         return_vals.append(p.apply_async(worker_curvefit, args = (TE, IMGdata[start:end,:], progress_tag, T2_clip, R2_clip)))
+    IMGdata = 0 # free memory        
     p.close()
     p.join()    
     #get results  
@@ -429,6 +442,7 @@ if __name__ == '__main__':
     data_T2map = zoom(data_T2map,[0.5,0.5,1],order=1)
     data_R2map = zoom(data_R2map,[0.5,0.5,1],order=1)
 
+    
     #transform to int
     max_T2 = np.amax(data_T2map);
     data_T2map *= 32767./max_T2
