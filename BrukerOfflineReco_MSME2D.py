@@ -215,7 +215,7 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
    METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
-if METHODdata["constNEchoes"] != "Yes"]:
+if METHODdata["constNEchoes"] != "Yes":
     print ('ERROR: non constNEchoes not implemented'); 
     sys.exit(1)
 if METHODdata["PVM_NEchoImages"] != METHODdata["NEchoes"]:
@@ -515,7 +515,20 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
         SpatResol_perm=SpatResol
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
-        print ('         resulting images may be rotated incorrectly');    
+        print ('         resulting images may be rotated incorrectly');
+elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
+    if METHODdata["PVM_SPackArrReadOrient"] == "L_R":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[0]
+        SpatResol_perm[1]=SpatResol[2]
+        SpatResol_perm[2]=SpatResol[1]
+        IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))        
+        IMGdata = IMGdata[::-1,:,::-1,:] # flip axis    
+    else:
+        SpatResol_perm=SpatResol
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');            
 else:
     SpatResol_perm=SpatResol
     print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
