@@ -308,7 +308,7 @@ FIDdata [:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
 #zero fill
-zero_fill=2.
+zero_fill=2
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
 FIDdata_ZF = np.zeros(shape=(int(dim[0]*zero_fill),int(dim[1]*zero_fill),
                              int(dim[2]*zero_fill)),dtype=np.complex64)
@@ -570,10 +570,11 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         IMGdata = IMGdata[::-1,:,:] # flip axis (axial L_R)
         IMGdata = IMGdata[:,:,::-1] # flip axis (axial L_R)
     else:
-        SpatResol_perm=SpatResol    
-        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
-                METHODdata["PVM_SPackArrReadOrient"]);
-        print ('         resulting images may be rotated incorrectly');
+        IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (axial A_P)
+        SpatResol_perm = np.empty(shape=(3))    
+        SpatResol_perm[0] = SpatResol[1]
+        SpatResol_perm[1] = SpatResol[0]
+        SpatResol_perm[2] = SpatResol[2]
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
     if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
         SpatResol_perm = np.empty(shape=(3))
