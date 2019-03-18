@@ -524,7 +524,7 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
         SpatResol_perm[2]=SpatResol[1]
         IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))        
         IMGdata = IMGdata[::-1,:,::-1,::-1] # flip axis 
-    if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+    elif METHODdata["PVM_SPackArrReadOrient"] == "H_F":
         SpatResol_perm = np.empty(shape=(3))
         SpatResol_perm[0]=SpatResol[0]
         SpatResol_perm[1]=SpatResol[2]
