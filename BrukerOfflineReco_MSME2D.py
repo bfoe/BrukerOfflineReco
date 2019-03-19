@@ -1,7 +1,7 @@
 #
 # reads Bruker MR data (Paravision v5.1)
 # reconstructs images from raw acquisition data (FID files)
-# this version is for the MSME 2D method only
+# this version is for MSME/MGE 2D methods only
 #
 # outputs 4D NIFTI containing all individual echo images
 # and a 3D NIFTI containing the average of all echoes
@@ -202,8 +202,11 @@ METHODdata["Method"] = METHODdata["Method"].replace (">","")
 
 
 #check for not implemented stuff
-if  METHODdata["Method"] != "MSME"  or METHODdata["PVM_SpatDimEnum"] != "2D":
-    print ('ERROR: Recon only implemented for MSME 2D method'); 
+if  not (METHODdata["Method"] == "MSME" or METHODdata["Method"] == "MGE"):
+    print ('ERROR: Recon only implemented for MSME/MGE methods'); 
+    sys.exit(1)
+if  METHODdata["PVM_SpatDimEnum"] != "2D":
+    print ('ERROR: Recon only implemented for 2D methods'); 
     sys.exit(1)
 if METHODdata["PVM_NSPacks"] != 1:
     print ('ERROR: Recon only implemented 1 package'); 
@@ -215,13 +218,14 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
    METHODdata["PVM_EncZfAccel1"] != 1:
     print ('ERROR: Recon for parallel acquisition not implemented'); 
     sys.exit(1)
-if METHODdata["constNEchoes"] != "Yes":
-    print ('ERROR: non constNEchoes not implemented'); 
-    sys.exit(1)
-if METHODdata["PVM_NEchoImages"] != METHODdata["NEchoes"]:
-    print ('ERROR: unequal #echoes'); 
-    sys.exit(1)         
-NEchoes = METHODdata["NEchoes"]
+if  METHODdata["Method"] != "MGE": # MGE method does not implement the constNEchoes/NEchoes parameters
+    if METHODdata["constNEchoes"] != "Yes":
+        print ('ERROR: non constNEchoes not implemented'); 
+        sys.exit(1)    
+    if METHODdata["PVM_NEchoImages"] != METHODdata["NEchoes"]:
+        print ('ERROR: unequal #echoes'); 
+        sys.exit(1)   
+NEchoes = METHODdata["PVM_NEchoImages"]    
 TEs = METHODdata["EffectiveTE"].astype(np.float32)
 
 #start
@@ -242,10 +246,12 @@ FIDrawdata_CPX = np.transpose (FIDrawdata_CPX, axes=(0,2,3,1))
 dim=FIDrawdata_CPX.shape
 
 #partial phase acquisition - add zeros
-if METHODdata["PVM_EncPftAccel1"] != 1:
-   zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2],dim[3]))
-   FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
-   dim=FIDrawdata_CPX.shape
+if  METHODdata["Method"] != "MGE": # MGE method does not implement the EncPftAccel1 parameter
+    if METHODdata["PVM_EncPftAccel1"] != 1:
+       zeros_ = np.zeros (shape=(dim[0],int(dim[1]*(float(METHODdata["PVM_EncPftAccel1"])-1.)),dim[2]))
+       FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=1)
+       dim=FIDrawdata_CPX.shape
+    #for the second phase encoding direction there is no parameter PVM_EncPftAccel2 (!?!)
    
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
@@ -286,7 +292,8 @@ print('.', end='') #progress indicator
 # (linear phase in time domain = shift in frequency domain)
 #
 #
-for j in range (3):
+if  METHODdata["Method"] != "MGE": # MGE method does not need this
+  for j in range (3):
     AVG = np.average(FIDdata[:,:,:,:],axis=3)   #complex average all echoes
     PH = FIDdata[:,:,:,:]/AVG[:,:,:,None]       #complex division = phase difference
     PH = np.angle(PH)                           #calc phase angle   
@@ -300,7 +307,7 @@ for j in range (3):
     #aff = np.eye(4)
     #IMG = nib.Nifti1Image(PH, aff)
     #nib.save(IMG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_testPH'+str(j+1)+'.nii.gz'))
-AVG = 0; PH = 0 #free memory
+  AVG = 0; PH = 0 #free memory
 
 
 #zero fill
@@ -626,10 +633,9 @@ if IMGdata_PH.shape[0]>1 and IMGdata_PH.shape[1]>1 and IMGdata_PH.shape[2]>1: IM
 print('.', end='') #progress indicator
 
 # calc sum of all echoes
-#IMGdata_AVG = np.average(np.abs(IMGdata[:,:,:,1::2]),axis=3) #odd
-#IMGdata_AVG = np.average(np.abs(IMGdata[:,:,:,::2]),axis=3)  #even
-#IMGdata_AVG = np.average(np.abs(IMGdata),axis=3)  #all
-IMGdata_AVG = np.abs(np.average(IMGdata,axis=3))  #complex average all echoes
+if  METHODdata["Method"] == "MGE": 
+      IMGdata_AVG = np.average(np.abs(IMGdata),axis=3)  #magnitude average
+else: IMGdata_AVG = np.abs(np.average(IMGdata,axis=3))  #complex average
 IMGdata_AVG = IMGdata_AVG/ReceiverGain/n_Averages;
 max_AVG = np.amax(IMGdata_AVG);
 IMGdata_AVG *= 32767./max_AVG
@@ -647,19 +653,19 @@ NIFTIimg_AVG.header.set_xyzt_units(3, 8)
 NIFTIimg_AVG.set_sform(aff, code=0)
 NIFTIimg_AVG.set_qform(aff, code=1)
 NIFTIimg_ABS = nib.Nifti1Image(IMGdata_ABS, aff)
-NIFTIimg_ABS.header['descrip'] = "TE1 = "+str(TEs[0])
+NIFTIimg_ABS.header['descrip'] = "TE1 = "+str(TEs[0])+"\t dTE = "+str(TEs[1]-TEs[0])
 NIFTIimg_ABS.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS.set_sform(aff, code=0)
 NIFTIimg_ABS.set_qform(aff, code=1)
 NIFTIimg_ABS_masked = nib.Nifti1Image(IMGdata_ABS*mask, aff)
-NIFTIimg_ABS_masked.header['descrip'] = "TE1 = "+str(TEs[0])
+NIFTIimg_ABS_masked.header['descrip'] = "TE1 = "+str(TEs[0])+"\t dTE = "+str(TEs[1]-TEs[0])
 NIFTIimg_ABS_masked.header.set_slope_inter(max_ABS/32767.,0)
 NIFTIimg_ABS_masked.header.set_xyzt_units(3, 8)
 NIFTIimg_ABS_masked.set_sform(aff, code=0)
 NIFTIimg_ABS_masked.set_qform(aff, code=1)
 NIFTIimg_PH  = nib.Nifti1Image(IMGdata_PH, aff)
-NIFTIimg_PH.header['descrip'] = "TE1 = "+str(TEs[0])
+NIFTIimg_PH.header['descrip'] = "TE1 = "+str(TEs[0])+"\t dTE = "+str(TEs[1]-TEs[0])
 NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
 NIFTIimg_PH.header.set_xyzt_units(3, 8)
 NIFTIimg_PH.set_sform(aff, code=0)

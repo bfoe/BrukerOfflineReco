@@ -307,6 +307,8 @@ for j in range(0,FIDdata.shape[2]): ph[:,:,j] -= float(j-int(FIDdata.shape[2]/2)
 FIDdata [:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
+#FIDdata [:,:,0] = 0 # quick fix for ACQ problem
+
 #zero fill
 zero_fill=2
 SpatResol=METHODdata["PVM_SpatResol"]/zero_fill
@@ -569,12 +571,17 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         SpatResol_perm = SpatResol
         IMGdata = IMGdata[::-1,:,:] # flip axis (axial L_R)
         IMGdata = IMGdata[:,:,::-1] # flip axis (axial L_R)
-    else:
-        IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (axial A_P)
+    elif METHODdata["PVM_SPackArrReadOrient"] == "A_P":
         SpatResol_perm = np.empty(shape=(3))    
         SpatResol_perm[0] = SpatResol[1]
         SpatResol_perm[1] = SpatResol[0]
-        SpatResol_perm[2] = SpatResol[2]
+        SpatResol_perm[2] = SpatResol[2]    
+        IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (axial A_P)
+    else:
+        SpatResol_perm=SpatResol    
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
     if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
         SpatResol_perm = np.empty(shape=(3))

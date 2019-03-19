@@ -179,10 +179,15 @@ if __name__ == '__main__':
     xyzt_units2  = img.header.get_xyzt_units()[1]
     sform = int(img.header['sform_code'])
     qform = int(img.header['qform_code'])
-    TE_str = str(img.header['descrip'])   
-    try: TE1 = float(TE_str[6:])
+    TE_str = str(img.header['descrip']).split('\t')  
+    try: TE1 = float(TE_str[0][6:])
     except: print ("ERROR: parsing TE information from header"); sys.exit(1)
-    TE = np.linspace(TE1,TE1*(IMGdata.shape[-1]),num=IMGdata.shape[-1],endpoint=True)
+    if len(TE_str)>1:
+       try: dTE = float(TE_str[1][6:])
+       except: print ("ERROR: parsing dTE information from header"); sys.exit(1) 
+    else:
+       dTE = TE1    
+    TE = np.linspace(TE1,TE1+dTE*(IMGdata.shape[-1]-1),num=IMGdata.shape[-1],endpoint=True)
     TE_str = np.array2string(TE,max_line_width=1000)
     TE_str = TE_str.replace('.]','').replace(']','').replace('[','')
     TE_str = TE_str.replace('. ',' ').replace('  ',' ')
