@@ -115,7 +115,7 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
        TE_temp = TE[nz]
        IMGdata_temp = IMGdata [i,:][nz]
        #fit
-       if TE_temp.shape[0]>3:
+       if TE_temp.shape[0]>=2:
           data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
           if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
