@@ -115,7 +115,7 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
        TE_temp = TE[nz]
        IMGdata_temp = IMGdata [i,:][nz]
        #fit
-       if TE_temp.shape[0]>=2:
+       if TE_temp.shape[0]>=3: # at least 3 good echoes
           data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
           if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
     return data_T2map, data_R2map
@@ -197,8 +197,8 @@ if __name__ == '__main__':
     if len(IMGdata.shape) != 4:
         print ('ERROR: 4D NIFTI expected, 3D NIFTI found, this is probably not a multiecho file'); 
         sys.exit(1)
-    if np.unique(TE).shape[0]<5:
-        print ("ERROR: need at least 5 unique TE's"); 
+    if not np.unique(TE).shape[0]>=3: # at least 3 good echoes
+        print ("ERROR: need at least 3 unique TE's"); 
         sys.exit(1)
     if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
         print ("ERROR: this looks like a Phase Image"); 
@@ -394,7 +394,7 @@ if __name__ == '__main__':
 
     # vector reduction
     mask = np.sum(mask, axis=1)
-    mask = mask >= 3 # at least 3 good echoes
+    mask = mask>=3 # at least 3 good echoes
     IMGdata = IMGdata [mask,:]
     
     #T2map calculation  

@@ -622,8 +622,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
 elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
     if METHODdata["PVM_SPackArrReadOrient"] == "L_R":
         SpatResol_perm = SpatResol
-        IMGdata = IMGdata[::-1,:,:,:] # flip axis (axial L_R)
-        IMGdata = IMGdata[:,:,::-1,:] # flip axis (axial L_R)
+        IMGdata = IMGdata[::-1,:,:,:] # flip axis
     elif METHODdata["PVM_SPackArrReadOrient"] == "A_P":
         SpatResol_perm = np.empty(shape=(3))    
         SpatResol_perm[0] = SpatResol[1]
