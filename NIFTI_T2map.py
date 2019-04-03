@@ -41,6 +41,7 @@ import sys
 import os
 import math
 import warnings
+from getopt import getopt
 import numpy as np
 import nibabel as nib
 import multiprocessing as mp
@@ -94,7 +95,7 @@ def FIT (x,y,T2_clip,R2_clip):
         if  (np.size(pars1)==1): bad_fit1=True
         if (np.size(covar1)==1): bad_fit1=True
     except RuntimeError: bad_fit1=True        
-    if bad_fit1: T2=0;T2err=0; A=0; Aerr=0                                            #fit failed
+    if bad_fit1: T2=0;T2err=0; A=0; Aerr=0                                             #fit failed
     elif pars1[1]>T2_clip: T2=T2_clip; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0] #above clip value
     elif pars1[1]<R2_clip: T2=R2_clip; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0] #above clip value
     else: T2=pars1[1]; T2err=covar1[1,1]; A=pars1[0]; Aerr=covar1[0,0]                 #fit OK
@@ -102,8 +103,9 @@ def FIT (x,y,T2_clip,R2_clip):
 
 def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
     warnings.filterwarnings("ignore")
-    data_T2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)
-    data_R2map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
+    data_T2map  = np.zeros((IMGdata.shape[0]),dtype=np.float32)
+    data_R2map  = np.zeros((IMGdata.shape[0]),dtype=np.float32)
+    data_TE0map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
     for i in range(IMGdata.shape[0]):
        if i%p==0: print ('.',end='')
        #filter     
@@ -116,9 +118,9 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
        IMGdata_temp = IMGdata [i,:][nz]
        #fit
        if TE_temp.shape[0]>=3: # at least 3 good echoes
-          data_T2map [i], T2err, A, Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
+          data_T2map [i], T2err, data_TE0map [i], Aerr = FIT (TE_temp, IMGdata_temp, T2_clip,R2_clip)
           if data_T2map[i]>0: data_R2map [i] = 1000./data_T2map [i]
-    return data_T2map, data_R2map
+    return data_T2map, data_R2map, data_TE0map
 
 def worker_zoom(IMGdata,p):
     z=2
@@ -128,6 +130,23 @@ def worker_zoom(IMGdata,p):
        zoomed[:,:,:,i] = zoom(IMGdata[:,:,:,i],[z,z,1],order=2)
     return zoomed
 
+def checkfile(file): # generic check if file exists
+    if not os.path.isfile(file): 
+        print ('ERROR:  File not found:\n        '+file); sys.exit(1)
+
+def usage():
+    print ('')
+    print ('Usage: '+Program_name+' [options] --input=<inputfile>')
+    print ('')
+    print ('   Available options are:')
+    print ('       --noechocorrection: skip correction of first echo')
+    print ('                           1st echo correction is usefull for 2D datasets') 
+    print ('                           you can use this switch to disable for 3D data')    
+    print ('       --nointerpolation : skip in/de-crease resolution')
+    print ('       --nofiltering     : skip filtering')
+    print ('       --version         : version information')
+    print ('       -h --help         : this page')    
+    print ('')        
 
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller 
@@ -154,21 +173,48 @@ if __name__ == '__main__':
     try: TKwindows.tk.call('set', '::tk::dialog::file::showHiddenVar', '0')
     except: pass
     TKwindows.update()
-        
-    #intercatively choose input NIFTI file
-    InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('MAGNT.nii.gz'))])
-    if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
-    InputFile = os.path.abspath(InputFile)
-    TKwindows.update()
-    try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
-    except: pass #silent
+    
+    # parse commandline parameters (if present)
+    try: opts, args =  getopt( sys.argv[1:],'h',['noechocorrection','nointerpolation', 'nofiltering','help','version','input='])
+    except:
+        error=str(sys.argv[1:]).replace("[","").replace("]","")
+        if "-" in str(error) and not "--" in str(error): 
+              print ('ERROR: Commandline '+str(error)+',   maybe you mean "--"')
+        else: print ('ERROR: Commandline '+str(error))
+        usage(); exit(2)
+    if len(args)>0: 
+        print ('ERROR: Commandline option "'+args[0]+'" not recognized')
+        usage(); exit(2)  
+    argDict = dict(opts)
+    if '-h' in argDict: usage(); exit(0)   
+    if '--help' in argDict: usage(); exit(0)  
+    if '--version' in argDict: print (Program_name+' '+Program_version); exit(0)
+    if '--input' in argDict: InputFile=argDict['--input']; checkfile(InputFile)
+    else: InputFile=""
+    if '--noechocorrection' in argDict: noechocorrection=True
+    else: noechocorrection=False    
+    if '--nointerpolation' in argDict: nointerpolation=True
+    else: nointerpolation=False
+    if '--nofiltering' in argDict: nofiltering=True
+    else: nofiltering=False
+   
+    
+    if InputFile == "":    
+        #intercatively choose input NIFTI file
+        InputFile = askopenfilename(title="Choose NIFTI file", filetypes=[("NIFTI files",('MAGNT.nii.gz'))])
+        if InputFile=="":print ('ERROR: No input file specified'); sys.exit(2)
+        InputFile = os.path.abspath(InputFile)
+        TKwindows.update()
+        try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
+        except: pass #silent
     dirname  = os.path.dirname(InputFile)
     basename = os.path.basename(InputFile)
     basename = os.path.splitext(basename)[0]
     basename = basename[0:basename.rfind('_MAG')]
     outfile1 = basename+'_T2map.nii.gz'
     outfile2 = basename+'_R2map.nii.gz'
-
+    outfile3 = basename+'_TE0map.nii.gz'
+    
     print ('Reading NIFTI file')
     img = nib.load(InputFile)
     IMGdata = img.get_data().astype(np.float32)
@@ -203,6 +249,10 @@ if __name__ == '__main__':
     if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
         print ("ERROR: this looks like a Phase Image"); 
         sys.exit(1)
+    
+    #guess if 2D or 3D
+    if max(Shape)>5*min(Shape): filter3D = True
+    else: filter3D = False
         
     # check if already masked
     N=10 # use 10% at the corners of the FOV
@@ -254,70 +304,72 @@ if __name__ == '__main__':
     #
     #
     # analyze histogram to find 1% higest intensity points of last echo image
-    n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-    steps=np.sqrt(n_points); start=0; fin=np.max(IMGdata [:,:,:,-1])
-    xbins =  np.linspace(start,fin,steps)
-    ybins, binedges = np.histogram(IMGdata [:,:,:,-1], bins=xbins)
-    i=len(ybins)-1
-    points=0; thresh = 0
-    while i>0:
-       points += ybins[i]       
-       thresh = xbins[i]   
-       if points >  n_points*0.01: #1%
-          i=1
-       i -= 1
-    #get longT2 points       
-    longT2_idx = IMGdata [:,:,:,-1]>thresh    
-    longT2_data = np.average(IMGdata[longT2_idx,:],axis=0)
-    #fit longT2 points
-    longT2_value, T2err, A, Aerr = FIT (TE[1:-1], longT2_data[1:-1], np.max(TE)*100, np.min(TE)*0.01)
-    #estimate normalized root mean square error
-    rmse=0
-    for i in range(1,TE.shape[0]):
-       rmse += ((expdecay(TE[i],A,longT2_value)-longT2_data[i])/longT2_data[i])**2
-    rmse = np.sqrt(rmse/(TE.shape[0]-1))
-    #do correction
-    first_echo_expected = expdecay(TE[0],A,longT2_value)
-    corr = first_echo_expected/longT2_data[0]    
-    if rmse>0.05: #5% RMS error limit
-       print ('1st echo correction skipped (RMS error too high)')
-    elif corr<=1:
-       print ('1st echo correction skipped (correction factor < 1.0)')    
-    else: #do correction
-       print ('1st echo correction factor is %0.2f' % corr)
-       IMGdata [:,:,:,0] *= corr
-
-    #increase resolution 2x
-    #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
-    if np.prod(IMGdata.shape)>1000000000: #single process with progress indicator
-        print ('Increase resolution 2x')    
-        zoomed = np.zeros((IMGdata.shape[0]*2,IMGdata.shape[1]*2,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
-        for i in range(IMGdata.shape[3]):
-            print ('.',end='') #progress indicator    
-            zoomed [:,:,:,i] = zoom(IMGdata[:,:,:,i],[2,2,1],order=2) #simple non-mp code
-        print ('')
-        IMGdata = zoomed    
-        zoomed=0 #free memory    
-    else: #multiprocessing
-        cores_min = min (cores,IMGdata.shape[3])  
-        print ('Increase resolution 2x using',cores_min,'cores')
-        p = mp.Pool(cores_min)
-        return_vals=[]
-        progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
-        for i in range(cores_min):
-            workpiece=int(math.ceil(float(IMGdata.shape[3])/float(cores_min)))
-            start = i*workpiece
-            end   = start+workpiece
-            if end > IMGdata.shape[3]: end = IMGdata.shape[3]  
-            return_vals.append(p.apply_async(worker_zoom, args = (IMGdata[:,:,:,start:end], progress_tag)))
-        IMGdata = 0 # free memory
-        p.close()
-        p.join()    
-        #get results  
-        IMGdata = return_vals[0].get()     
-        for i in range(1,cores_min):
-            IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
-        print ('') 
+    if not noechocorrection:
+        n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
+        steps=np.sqrt(n_points); start=0; fin=np.max(IMGdata [:,:,:,-1])
+        xbins =  np.linspace(start,fin,steps)
+        ybins, binedges = np.histogram(IMGdata [:,:,:,-1], bins=xbins)
+        i=len(ybins)-1
+        points=0; thresh = 0
+        while i>0:
+           points += ybins[i]       
+           thresh = xbins[i]   
+           if points >  n_points*0.01: #1%
+              i=1
+           i -= 1
+        #get longT2 points       
+        longT2_idx = IMGdata [:,:,:,-1]>thresh    
+        longT2_data = np.average(IMGdata[longT2_idx,:],axis=0)
+        #fit longT2 points
+        longT2_value, T2err, A, Aerr = FIT (TE[1:-1], longT2_data[1:-1], np.max(TE)*100, np.min(TE)*0.01)
+        #estimate normalized root mean square error
+        rmse=0
+        for i in range(1,TE.shape[0]):
+           rmse += ((expdecay(TE[i],A,longT2_value)-longT2_data[i])/longT2_data[i])**2
+        rmse = np.sqrt(rmse/(TE.shape[0]-1))
+        #do correction
+        first_echo_expected = expdecay(TE[0],A,longT2_value)
+        corr = first_echo_expected/longT2_data[0]    
+        if rmse>0.05: #5% RMS error limit
+           print ('1st echo correction skipped (RMS error too high)')
+        elif corr<=1:
+           print ('1st echo correction skipped (correction factor < 1.0)')    
+        else: #do correction
+           print ('1st echo correction factor is %0.2f' % corr)
+           IMGdata [:,:,:,0] *= corr
+       
+    if not nointerpolation:
+        #increase resolution 2x
+        #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
+        if np.prod(IMGdata.shape)>1000000000: #single process with progress indicator
+            print ('Increase resolution 2x')    
+            zoomed = np.zeros((IMGdata.shape[0]*2,IMGdata.shape[1]*2,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
+            for i in range(IMGdata.shape[3]):
+                print ('.',end='') #progress indicator    
+                zoomed [:,:,:,i] = zoom(IMGdata[:,:,:,i],[2,2,1],order=2) #simple non-mp code
+            print ('')
+            IMGdata = zoomed    
+            zoomed=0 #free memory    
+        else: #multiprocessing
+            cores_min = min (cores,IMGdata.shape[3])  
+            print ('Increase resolution 2x using',cores_min,'cores')
+            p = mp.Pool(cores_min)
+            return_vals=[]
+            progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
+            for i in range(cores_min):
+                workpiece=int(math.ceil(float(IMGdata.shape[3])/float(cores_min)))
+                start = i*workpiece
+                end   = start+workpiece
+                if end > IMGdata.shape[3]: end = IMGdata.shape[3]  
+                return_vals.append(p.apply_async(worker_zoom, args = (IMGdata[:,:,:,start:end], progress_tag)))
+            IMGdata = 0 # free memory
+            p.close()
+            p.join()    
+            #get results  
+            IMGdata = return_vals[0].get()     
+            for i in range(1,cores_min):
+                IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
+            print ('') 
     
     # calculate mask
     # use noise in all 8 corners to establish threshold
@@ -417,36 +469,72 @@ if __name__ == '__main__':
     p.close()
     p.join()    
     #get results  
-    temp_T2map = np.zeros((0),dtype=np.float32)
-    temp_R2map = np.zeros((0),dtype=np.float32)        
+    temp_T2map  = np.zeros((0),dtype=np.float32)
+    temp_R2map  = np.zeros((0),dtype=np.float32)
+    temp_TE0map = np.zeros((0),dtype=np.float32)     
     for i in range(cores):
-        temp_T2map = np.concatenate ((temp_T2map, return_vals[i].get()[0]))
-        temp_R2map = np.concatenate ((temp_R2map, return_vals[i].get()[1]))
+        temp_T2map  = np.concatenate ((temp_T2map, return_vals[i].get()[0]))
+        temp_R2map  = np.concatenate ((temp_R2map, return_vals[i].get()[1]))
+        temp_TE0map = np.concatenate ((temp_TE0map, return_vals[i].get()[2]))        
     print ('')        
 
     #undo vector reduction
-    data_T2map = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
-    data_R2map = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)     
-    data_T2map[mask] = temp_T2map[:] # undo vector reduction 
-    data_R2map[mask] = temp_R2map[:] # undo vector reduction    
+    data_T2map  = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
+    data_R2map  = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32) 
+    data_TE0map = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)      
+    data_T2map[mask]  = temp_T2map[:] # undo vector reduction 
+    data_R2map[mask]  = temp_R2map[:] # undo vector reduction
+    data_TE0map[mask] = temp_TE0map[:] # undo vector reduction     
+    temp_T2map=0; temp_R2map=0; temp_TE0map=0 # free memory
     
     #reshape to original
-    data_T2map = np.reshape(data_T2map, (dim[0],dim[1],dim[2]))
-    data_R2map = np.reshape(data_R2map, (dim[0],dim[1],dim[2]))
+    data_T2map  = np.reshape(data_T2map, (dim[0],dim[1],dim[2]))
+    data_R2map  = np.reshape(data_R2map, (dim[0],dim[1],dim[2]))
+    data_TE0map = np.reshape(data_TE0map,(dim[0],dim[1],dim[2]))    
 
-    #filter 2D
-    print ('Filter T2 map')
-    for i in range(dim[2]):
-       data_T2map[:,:,i] = median_filter  (data_T2map[:,:,i], size = (5,5))
-       data_T2map[:,:,i] = gaussian_filter(data_T2map[:,:,i], sigma=0.7)
-       data_R2map[:,:,i] = median_filter  (data_R2map[:,:,i], size = (5,5))
-       data_R2map[:,:,i] = gaussian_filter(data_R2map[:,:,i], sigma=0.7)
-
-    #decrease resolution
-    print ('Decrease resolution 2x')
-    data_T2map = zoom(data_T2map,[0.5,0.5,1],order=1)
-    data_R2map = zoom(data_R2map,[0.5,0.5,1],order=1)
-
+    if not nointerpolation:
+        if not nofiltering:
+            if not filter3D: #filter 2D
+                print ('2D Filter T2 map')
+                for i in range(dim[2]):
+                   data_T2map[:,:,i]  = median_filter  (data_T2map[:,:,i], size = (5,5))
+                   data_T2map[:,:,i]  = gaussian_filter(data_T2map[:,:,i], sigma=0.7)
+                   data_R2map[:,:,i]  = median_filter  (data_R2map[:,:,i], size = (5,5))
+                   data_R2map[:,:,i]  = gaussian_filter(data_R2map[:,:,i], sigma=0.7)
+                   data_TE0map[:,:,i] = median_filter  (data_TE0map[:,:,i], size = (5,5))
+                   data_TE0map[:,:,i] = gaussian_filter(data_TE0map[:,:,i], sigma=0.7)                   
+            else: # 3D filter
+                print ('3D Filter T2 map')
+                data_T2map  = median_filter  (data_T2map, size = (3,3,3))
+                data_T2map  = gaussian_filter(data_T2map, sigma=0.4)
+                data_R2map  = median_filter  (data_R2map, size = (3,3,3))
+                data_R2map  = gaussian_filter(data_R2map, sigma=0.4)
+                data_TE0map = median_filter  (data_TE0map, size = (3,3,3))
+                data_TE0map = gaussian_filter(data_TE0map, sigma=0.4)                
+        #decrease resolution
+        print ('Decrease resolution 2x')
+        data_T2map  = zoom(data_T2map,[0.5,0.5,1],order=1)
+        data_R2map  = zoom(data_R2map,[0.5,0.5,1],order=1)
+        data_TE0map = zoom(data_TE0map,[0.5,0.5,1],order=1)        
+    else: 
+        if not nofiltering: # no resolution increase but filter yes (uses lower filter values)
+            if not filter3D: #filter 2D
+                print ('2D Filter T2 map')
+                for i in range(dim[2]):
+                   data_T2map[:,:,i]  = median_filter  (data_T2map[:,:,i], size = (3,3))
+                   data_T2map[:,:,i]  = gaussian_filter(data_T2map[:,:,i], sigma=0.2)
+                   data_R2map[:,:,i]  = median_filter  (data_R2map[:,:,i], size = (3,3))
+                   data_R2map[:,:,i]  = gaussian_filter(data_R2map[:,:,i], sigma=0.2)
+                   data_TE0map[:,:,i] = median_filter  (data_TE0map[:,:,i], size = (3,3))
+                   data_TE0map[:,:,i] = gaussian_filter(data_TE0map[:,:,i], sigma=0.2)                    
+            else: # 3D filter
+                print ('3D Filter T2 map')
+                data_T2map  = median_filter  (data_T2map, size = (3,3,3))
+                data_T2map  = gaussian_filter(data_T2map, sigma=0.2)
+                data_R2map  = median_filter  (data_R2map, size = (3,3,3))
+                data_R2map  = gaussian_filter(data_R2map, sigma=0.2)
+                data_TE0map = median_filter  (data_TE0map, size = (3,3,3))
+                data_TE0map = gaussian_filter(data_TE0map, sigma=0.2)                 
     
     #transform to int
     max_T2 = np.amax(data_T2map);
@@ -455,6 +543,9 @@ if __name__ == '__main__':
     max_R2 = np.amax(data_R2map);
     data_R2map *= 32767./max_R2
     data_R2map = data_R2map.astype(np.int16)
+    max_TE0 = np.amax(data_TE0map);
+    data_TE0map *= 32767./max_TE0
+    data_TE0map = data_TE0map.astype(np.int16)    
 
     #Write NIFTIs
     T2_img = nib.Nifti1Image(data_T2map, affine)
@@ -467,9 +558,15 @@ if __name__ == '__main__':
     R2_img.header.set_xyzt_units(xyzt_units1,xyzt_units2)
     R2_img.set_sform(affine, sform)
     R2_img.set_qform(affine, qform)
+    TE0_img = nib.Nifti1Image(data_R2map, affine)
+    TE0_img.header.set_slope_inter(max_R2/32767.,0)
+    TE0_img.header.set_xyzt_units(xyzt_units1,xyzt_units2)
+    TE0_img.set_sform(affine, sform)
+    TE0_img.set_qform(affine, qform)    
     try: 
        nib.save(T2_img, os.path.join(dirname,outfile1))
-       nib.save(R2_img, os.path.join(dirname,outfile2))   
+       nib.save(R2_img, os.path.join(dirname,outfile2)) 
+       nib.save(TE0_img,os.path.join(dirname,outfile3))         
     except: print ('ERROR:  problem while writing results'); exit(1)
     print ('Successfully written output files')
 
