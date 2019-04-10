@@ -1,8 +1,47 @@
+#
+# This tool calculates an optimized set of venc values 
+# for a multivenc PCA experiment
+# Otimization is done with Monte Carlo (simulated anealing)
+# The optimization criterium is to maintain a flat signal curve
+# over a specified range of possible velocity values
+# for the sum of squares of the joint magnitude flow image
+#
+#
+# ----- VERSION HISTORY -----
+#
+# Version 0.1 - 10, April 2019
+#       - 1st public github Release
+#
+# ----- LICENSE -----                 
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#    For more detail see the GNU General Public License.
+#    <http://www.gnu.org/licenses/>.
+#
+#    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+#    THE SOFTWARE.
+#
+# ----- REQUIREMENTS ----- 
+#
+#    This program was developed under Python Version 2.7
+#    with the following additional libraries: 
+#    - numpy
+
+
 from __future__ import print_function
 import sys
 import os
 import math
 import random
+import signal
 import numpy as np
 
 #setup constants
@@ -65,6 +104,39 @@ def opt_min (vencs,velocities):
 def randrange_float(start, stop, step):
     return np.round(random.randint(0, int((stop - start) / step)) * step + start, decimals=digits)    
 
+def signal_handler(signal, frame): 
+    print ('\nUser abort detected\n')        
+    try: print ("Total iterations : ",total_iter)
+    except: pass # silent
+    try: print ("Signal variation : ",final_opt_value)
+    except: print ("No result yet")
+    try: print ("Optimum vencs    : ",final_opt_venc)
+    except: print ("No result yet")
+    print ("")
+    wait_for_keypress()
+    sys.exit(0)    
+
+def wait_for_keypress():
+    if sys.platform=="win32": os.system("pause") # windows
+    else: 
+        #os.system('read -s -n 1 -p "Press any key to continue...\n"')
+        import termios
+        print("Press any key to continue...")
+        fd = sys.stdin.fileno()
+        oldterm = termios.tcgetattr(fd)
+        newattr = termios.tcgetattr(fd)
+        newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
+        termios.tcsetattr(fd, termios.TCSANOW, newattr)
+        try: result = sys.stdin.read(1)
+        except IOError: pass
+        finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm) 
+
+#setup signal handler
+signal.signal(signal.SIGINT, signal_handler)  # keyboard interrupt
+signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
+if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
+
+
 digits = int(math.ceil(-math.log10(precision)))
 velocities = np.linspace (venc_min,venc_max,n_velocities, endpoint=True)
 m=0
@@ -121,3 +193,6 @@ print ("")
 print ("Total iterations : ",total_iter)
 print ("Signal variation : ",final_opt_value)
 print ("Optimum vencs    : ",final_opt_venc)
+print ("")
+
+wait_for_keypress()
