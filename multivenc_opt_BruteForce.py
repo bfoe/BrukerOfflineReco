@@ -65,7 +65,7 @@ venc_min   venc_max     n_vencs     venc_step   n_velocities    variation   venc
 6          100          7           2           1000            0.0956260   16 18 22 28 36 54 100
 
 CAUTION: the below line with venc_step=1 take several days to calculate            
-6          100          7           1           1000            0.08        16 18 22 27 36 54 100 (hope this is the result)
+6          100          7           1           1000            0.0848639   16 18 22 27 36 54 100
 '''
 
 #
