@@ -307,7 +307,11 @@ for j in range(0,FIDdata.shape[2]): ph[:,:,j] -= float(j-int(FIDdata.shape[2]/2)
 FIDdata [:,:,:] = mag * np.exp(1j*ph)
 print('.', end='') #progress indicator
 
-#FIDdata [:,:,0] = 0 # quick fix for ACQ problem
+# Fix for ACQ problem
+if np.average(np.abs(FIDdata [:,:,0])) > 100.*np.average(np.abs(FIDdata [:,:,1] )) and\
+   np.std(np.abs(FIDdata [:,:,0])) > 1000.*np.std(np.abs(FIDdata [:,:,1] )):
+   FIDdata [:,:,0] = 0 
+   print('WARNING: Acquisition problem in first line corrected')
 
 #zero fill
 zero_fill=2
