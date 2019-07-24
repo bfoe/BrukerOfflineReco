@@ -235,7 +235,7 @@ try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
 #read FID (main & ref)
-with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 if haveRef:
     with open(FIDfileRef, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
@@ -880,6 +880,14 @@ remove_labels = unique[np.where(counts<=N)] # find clusters with less than N poi
 remove_indices = np.where(np.isin(labeled_mask,remove_labels))
 mask[remove_indices] = 0
 print('.', end='') #progress indicator
+
+#check maximum
+n_points = np.where(np.abs(IMGdata_decoded_PH [:,1:4,:,:]*mask[:,None,:,:]) > 0.99*np.pi)
+n_nonzero = len(np.nonzero(mask)[0])
+percentage = float(len(n_points[0]))/float(np.prod(IMGdata_decoded_PH[:,1,:,:].shape))*100.
+if percentage>0.01:
+   print ("Warning: %d points may suffer from phase wraps" % len(n_points[0]))
+   print ("         this represents about %.2f%% of all points>0" % percentage)
 
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!

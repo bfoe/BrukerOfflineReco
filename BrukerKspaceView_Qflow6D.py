@@ -149,7 +149,7 @@ FIDfile = os.path.abspath(FIDfile)
 TKwindows.update()
 
 #read FID 
-with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
