@@ -224,12 +224,16 @@ img=filtered_image.GetOutput()
 
 # convert ITK to Numpy Array
 arr = itk.GetArrayFromImage(img)
+''' # better not do this
 #Global Renormalization to correct effects from ITK filter
 mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
 flow_sum_filtered = np.sum(mag)
 renormalize = flow_sum_orig/flow_sum_filtered
 print ("Global Renormalization: %0.2f" % renormalize)
-arr *= renormalize    
+arr *= renormalize  
+'''
+# empirical correction: flow falues are slightly overestimated
+arr *= 0.90  
 print ('Regularizing Vector Image: FDM filter')
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
 #mask out slow flow values introduced by FDM
@@ -291,8 +295,9 @@ nz = np.nonzero(flowvol)
 avg_flow_volume = np.average(np.abs(flowvol[nz]))
 avg_flow_volume *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s       
 avg_flow_volume *= SpatResol_perm[1]/1000.*SpatResol_perm[2]/1000. # multiply with inplane spatial resolution, result is in mm^3/s
-avg_flow_volume /= 1000. # convert mm^3/s ---> ml/s       
-print (' %0.2f ml/s' % avg_flow_volume)   
+avg_flow_volume /= 1000. # convert mm^3/s ---> ml/s
+avg_flow_volume *= 60.   # convert ml/s   ---> ml/min        
+print (' %0.2f ml/min' % avg_flow_volume)   
 
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
