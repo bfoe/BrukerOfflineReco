@@ -238,7 +238,7 @@ except: pass #silent
 with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 if haveRef:
-    with open(FIDfileRef, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+    with open(FIDfileRef, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
     FIDrawdata_CPX_REF = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
@@ -358,6 +358,8 @@ if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a 
 try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,4,dim[1],dim[2], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]
+'''
+this should not happen anymore (reading in 'rb' mode)
 #check for acquisition error and possibly correct
 max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX)),FIDrawdata_CPX.shape)
 if max_idx[3]==0:
@@ -374,7 +376,7 @@ if max_idx[0]==0:
     print ('WARNING: bad acquisition detected, maximum in dimension 1 is at position 0') 
     print ('         trying to correct by removing respective data line')
     FIDrawdata_CPX [0,:,:,:] = 0
-
+'''
 # reshape reference
 if haveRef:
     dimRef=METHODdataRef["PVM_EncMatrix"]
@@ -383,6 +385,8 @@ if haveRef:
     try: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF.reshape(dim0,4,dimRef[1],dimRef[2], order="F")
     except: print ('ERROR: reference k-space data reshape failed (dimension problem)'); sys.exit(1)
     if dim0 != dimRef[0]: FIDrawdata_CPX_REF = FIDrawdata_CPX_REF[0:dimRef[0],:,:,:]
+    '''
+    this should not happen anymore (reading in 'rb' mode)
     #check for acquisition error and possibly correct
     max_idx = np.unravel_index(np.argmax(np.abs(FIDrawdata_CPX_REF)),FIDrawdata_CPX_REF.shape)
     if max_idx[3]==0:
@@ -399,7 +403,7 @@ if haveRef:
         print ('WARNING: bad reference detected, maximum in dimension 1 is at position 0') 
         print ('         trying to correct by removing respective data line')
         FIDrawdata_CPX_REF [0,:,:,:] = 0
-        
+    '''   
 #reorder data (main)
 FIDdata_tmp=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],4,dim[1],dim[2]),dtype=np.complex64)
@@ -886,7 +890,7 @@ n_points = np.where(np.abs(IMGdata_decoded_PH [:,1:4,:,:]*mask[:,None,:,:]) > 0.
 n_nonzero = len(np.nonzero(mask)[0])
 percentage = float(len(n_points[0]))/float(np.prod(IMGdata_decoded_PH[:,1,:,:].shape))*100.
 if percentage>0.01:
-   print ("Warning: %d points may suffer from phase wraps" % len(n_points[0]))
+   print ("\nWarning: %d points may suffer from phase wraps" % len(n_points[0]))
    print ("         this represents about %.2f%% of all points>0" % percentage)
 
 #transform to int
