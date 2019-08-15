@@ -157,11 +157,11 @@ except: print ('ERROR: unable to make folder', new_dirname); sys.exit(2)
 
 
 #write logfile     
-with open(os.path.join(new_dirname,logname), "w") as logfile:
-    logfile.write('Result VTK file is combination of:\n')
-    logfile.write(FIDfile1+'\n')
-    logfile.write(FIDfile2+'\n')
-    logfile.write(FIDfile3+'\n')
+logfile = open(os.path.join(new_dirname,logname), "w")
+logfile.write('Result VTK file is combination of:\n')
+logfile.write(FIDfile1+'\n')
+logfile.write(FIDfile2+'\n')
+logfile.write(FIDfile3+'\n')
 
 #get xyz_unit from nibabel test-read for usage in "quick fix" below
 img = nib.load(FIDfile1)
@@ -224,16 +224,8 @@ img=filtered_image.GetOutput()
 
 # convert ITK to Numpy Array
 arr = itk.GetArrayFromImage(img)
-''' # better not do this
-#Global Renormalization to correct effects from ITK filter
-mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
-flow_sum_filtered = np.sum(mag)
-renormalize = flow_sum_orig/flow_sum_filtered
-print ("Global Renormalization: %0.2f" % renormalize)
-arr *= renormalize  
-'''
-# empirical correction: flow falues are slightly overestimated
-arr *= 0.90  
+
+# empirical correction: flow falues are slightly overestimated 
 print ('Regularizing Vector Image: FDM filter')
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
 #mask out slow flow values introduced by FDM
@@ -253,8 +245,7 @@ mask[remove_indices] = 0
 #apply mask
 arr[:,:,:,:] *= mask [:,:,:,None]
 
-#Local Renormalization over all nonzero voxels
-print ('Equalizing flow volume over main flow direction:', end = '')
+# -----  Flow volume adjust -----
 #find main flow component
 flow_components=np.abs(np.sum(arr[:,:,:,:],axis=(0,1,2)))
 main_component = np.argmax(flow_components)
@@ -262,19 +253,36 @@ main_component = np.argmax(flow_components)
 flow_directions = np.argsort(arr.shape[0:3])
 flow_directions = flow_directions[::-1] # decreasing order
 flow_directions = np.append (flow_directions,3)
-#calculate flow volume profile along main flow component and direction
+#calculate flow volume along main flow component and direction
+SpatResol_perm = SpatResol [flow_directions[0:3]]  
 flowvol = np.zeros(arr.shape[flow_directions[0]], dtype=np.float32)
 for i in range(0,arr.shape[flow_directions[0]]): 
     flowvol[i] = np.sum(np.transpose(arr,flow_directions)[i,:,:,main_component])
-# prepare normalization
+nz = np.nonzero(flowvol)
+avg_flow_volume = np.average(np.abs(flowvol[nz]))
+avg_flow_volume *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s       
+avg_flow_volume *= SpatResol_perm[1]/1000.*SpatResol_perm[2]/1000. # multiply with inplane spatial resolution, result is in mm^3/s
+avg_flow_volume /= 1000. # convert mm^3/s ---> ml/s
+avg_flow_volume *= 60.   # convert ml/s   ---> ml/min        
+# read input from keyboard
+OK=False
+while not OK:
+    dummy = raw_input("Adjust flow volume along main flow direction [%0.1f ml/min]: "% avg_flow_volume)
+    if dummy == '': dummy=avg_flow_volume
+    try: input_cor = float(dummy); OK=True
+    except: print ("Input Error")
+logfile.write('Average  flow volume '+str(avg_flow_volume)+'\n')
+if input_cor!=avg_flow_volume: logfile.write('Adjusted flow volume '+str(input_cor)+'\n') 
+input_cor /= avg_flow_volume   
+# prepare adjust
 flowvol = np.abs(flowvol)
 flowvol = smooth(flowvol,40)
 flowvol_normalize = np.zeros(flowvol.shape, dtype=np.float32)
 flowvol_normalize.fill (1.0)
 nzero = np.nonzero(flowvol)
 flowvol_avg = np.average(flowvol[nzero])
-flowvol_normalize [nzero] = flowvol_avg/flowvol[nzero]
-# do normalization 
+flowvol_normalize [nzero] = input_cor*flowvol_avg/flowvol[nzero]
+# do adjust
 if flow_directions[0]==0:
     for i in range(0,arr.shape[0]): 
         arr [i,:,:,:] *= flowvol_normalize[i]
@@ -285,19 +293,9 @@ elif flow_directions[0]==2:
     for i in range(0,arr.shape[2]): 
         arr [:,:,i,:] *= flowvol_normalize[i]
 else:
-    print ("Warning unknown case for main flow direction ", flow_directions[0] )            
-#print average flow volume/s in main direction
-flowvol = np.zeros(arr.shape[flow_directions[0]], dtype=np.float32)
-SpatResol_perm = SpatResol [flow_directions[0:3]]    
-for i in range(0,arr.shape[flow_directions[0]]): 
-    flowvol[i] = np.sum(np.transpose(arr,flow_directions)[i,:,:,main_component])
-nz = np.nonzero(flowvol)
-avg_flow_volume = np.average(np.abs(flowvol[nz]))
-avg_flow_volume *= 10. # venc is in cm/s, multiply by 10. to get this in mm/s       
-avg_flow_volume *= SpatResol_perm[1]/1000.*SpatResol_perm[2]/1000. # multiply with inplane spatial resolution, result is in mm^3/s
-avg_flow_volume /= 1000. # convert mm^3/s ---> ml/s
-avg_flow_volume *= 60.   # convert ml/s   ---> ml/min        
-print (' %0.2f ml/min' % avg_flow_volume)   
+    print ("Error: unknown case for main flow direction ", flow_directions[0] )
+    sys.exit(0)    
+
 
 # convert Numpy Array back to ITK (component wise, directly not worx)
 image_X = itk.GetImageFromArray(arr[:,:,:,0])
@@ -388,7 +386,7 @@ try: nib.save(NIFTIimg, os.path.join(new_dirname,Out_file))
 except: print ('\nERROR:  problem while writing results'); sys.exit(1)
 print('.', end='') #progress indicator
 
-
+logfile.close()
 print ("\ndone\n") 
 if sys.platform=="win32": os.system("pause") # windows
 else: 
