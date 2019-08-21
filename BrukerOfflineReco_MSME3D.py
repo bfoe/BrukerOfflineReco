@@ -196,7 +196,7 @@ space=' '; slash='/';
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
 Program_name = os.path.basename(sys.argv[0]); 
 if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
-Program_version = "v0.1" # program version
+Program_version = "v0.2" # program version
 python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
 # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
 if sys.platform=="win32": os.system("title "+Program_name)
