@@ -225,12 +225,43 @@ img=filtered_image.GetOutput()
 # convert ITK to Numpy Array
 arr = itk.GetArrayFromImage(img)
 
-# empirical correction: flow falues are slightly overestimated 
+#Global Renormalization to correct effects from ITK filter	
+mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))	
+flow_sum_filtered = np.sum(mag)	
+renormalize = flow_sum_orig/flow_sum_filtered	
+print ("Global Renormalization: %0.2f" % renormalize)
+logfile.write("Global Renormalization: %0.2f\n" % renormalize)	
+arr *= renormalize  
+
+
 print ('Regularizing Vector Image: FDM filter')
 [arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0]] = FDM.fdmDenoise (arr[:,:,:,2],arr[:,:,:,1],arr[:,:,:,0],SpatResol)
-#mask out slow flow values introduced by FDM
+
+#set threshold
 mag = np.sqrt(np.square(arr[:,:,:,0]) + np.square(arr[:,:,:,1]) + np.square(arr[:,:,:,2]))
+'''
+n_points=np.prod(mag.shape)
+steps =np.sqrt(n_points) 
+start = np.min(mag[np.nonzero(mag)])
+fin   = np.max(mag)
+xbins =  np.linspace(start,fin,steps)
+ybins, binedges = np.histogram(mag, bins=xbins)
+ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
+ybins = smooth(ybins,21)
+max_index = np.argmax(ybins)
+maximum = float(ybins[max_index])
+while i<ybins.shape[0]-1:
+    i+=1
+    if ybins[i] < 0.5*maximum: fwhm_index = i; i = ybins.shape[0]   
+threshold_index = max_index + 5*(fwhm_index-max_index)
+threshold = xbins[threshold_index]     
+'''
 threshold=np.max(mag)*0.01 # 1%
+print ("Threshold set to %0.3f" % threshold)
+logfile.write("Threshold set to %0.3f\n" % threshold)
+
+
+#mask out slow flow values introduced by FDM
 mask =  mag [:,:,:] > threshold
 # clear up mask: leave only the largest cluster of connected points
 s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
