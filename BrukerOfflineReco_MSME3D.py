@@ -12,6 +12,8 @@
 #
 # Version 0.1 - 18, February 2019
 #       - 1st public github Release
+# Version 0.2 - 21, August 2019
+#       - Python v3.7 compatibility
 #
 # ----- LICENSE -----                 
 #
@@ -186,7 +188,8 @@ def usage():
     print ('       --noantialias : ignore Brukers anti-alias parameter')
     print ('       --version     : version information')
     print ('       -h --help     : this page')    
-    print ('')        
+    print ('')
+    sys.stdout.flush()
        
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -289,7 +292,7 @@ NEchoes = METHODdata["PVM_NEchoImages"]
 TEs = METHODdata["EffectiveTE"].astype(np.float32)
     
 #start
-print ('Starting recon')    
+print ('Starting recon'); sys.stdout.flush()
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
@@ -315,13 +318,15 @@ if  METHODdata["Method"] != "MGE": # MGE method does not implement the EncPftAcc
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
-order1=METHODdata["PVM_EncSteps1"]+dim[1]/2                          
+order1=METHODdata["PVM_EncSteps1"]+dim[1]/2
+order1 = order1.astype(np.int)                          
 for i in range(0,order1.shape[0]): FIDdata_tmp[:,order1[i],:,:]=FIDrawdata_CPX[:,i,:,:]
 FIDrawdata_CPX = 0 #free memory  
-order2=METHODdata["PVM_EncSteps2"]+dim[2]/2                             
+order2=METHODdata["PVM_EncSteps2"]+dim[2]/2
+order2 = order2.astype(np.int)                              
 for i in range(0,order2.shape[0]): FIDdata[:,:,order2[i],:]=FIDdata_tmp[:,:,i,:]
 FIDdata_tmp = 0 #free memory  
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 # apply FOV offsets = (linear phase in k-space)
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
@@ -333,7 +338,7 @@ mag = np.abs(FIDdata[:,:,:,:]); ph = np.angle(FIDdata[:,:,:,:])
 for i in range(0,FIDdata.shape[1]): ph[:,i,:,:] -= float(i-int(FIDdata.shape[1]/2))*phase_step1
 for j in range(0,FIDdata.shape[2]): ph[:,:,j,:] -= float(j-int(FIDdata.shape[2]/2))*phase_step2
 FIDdata [:,:,:,:] = mag * np.exp(1j*ph)
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 '''
 should not be nescessary for 3D acquisitions
@@ -360,7 +365,7 @@ for j in range (3):
        PH[:,:,:,i] = median_filter  (PH[:,:,:,i], size = (5,5,5))    #median filter 1   
        PH[:,:,:,i] = median_filter  (PH[:,:,:,i], size = (5,5,5))    #median filter 2   
        PH[:,:,:,i] = gaussian_filter(PH[:,:,:,i], sigma=10, truncate=3)
-       print('.', end='') #progress indicator    
+       print('.', end=''); sys.stdout.flush() #progress indicator
     FIDdata [:,:,:,:] = np.abs(FIDdata) * np.exp(1j*(np.angle(FIDdata)-PH)) #apply correction
     #save images to check visually
     #aff = np.eye(4)
@@ -382,7 +387,7 @@ FIDdata_ZF[dim0start:dim0start+dim[0],dim1start:dim1start+dim[1],dim2start:dim2s
 FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory 
 dim=FIDdata.shape
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 
 #find borders in case of partial echo and/or phase encoding
@@ -394,7 +399,7 @@ first_z=np.amin(nz[2,:]); last_z=np.amax(nz[2,:])
 percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
 percentual_inc_y=float(last_y+first_y+1-dim[1])/float(last_y-first_y)*100.
 percentual_inc_z=float(last_z+first_z+1-dim[2])/float(last_z-first_z)*100.
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
 if partial_fourrier:
@@ -418,15 +423,15 @@ if partial_fourrier:
     z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
     hanning_z [int(dim[2]/2)-npoints_z:int(dim[2]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
     FIDlowpass[:,:,:] *= hanning_z [None,None,:]
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     #FFT lowpass data
     FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,1,2))
     FIDlowpass = FFT3D(FIDlowpass)
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     #FFT actual data
     FIDdata = np.fft.fftshift(FIDdata, axes=(0,1,2))
     FIDdata = FFT3D(FIDdata)
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     # subtract phase difference from actual
     FIDlowpass = FIDdata/FIDlowpass # use this phase
     FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
@@ -434,7 +439,7 @@ if partial_fourrier:
     #inverse FFT
     FIDdata = iFFT3D(FIDdata)
     FIDdata = np.fft.fftshift(FIDdata, axes=(0,1,2))    
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     
     # copy complex conjugates
     percentage = 5 # mix conjugate with original
@@ -450,8 +455,8 @@ if partial_fourrier:
         FIDdata[1:first_x+1+npoints_x,:,:] *= hanning_x [:,None,None]
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None]
-        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2])
-        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2])
+        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2]); sys.stdout.flush()
+        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2]); sys.stdout.flush()
         FIDdata[1:first_x+1+npoints_x,:,:] += compl_conjugate_x[:,:,:]
         first_x=dim[0]-last_x
         compl_conjugate_x = 0 # free memory
@@ -468,8 +473,8 @@ if partial_fourrier:
         FIDdata[last_x+1-npoints_x:dim[0],:,:] *= hanning_x [:,None,None]
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None]
-        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2])
-        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2])
+        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2]); sys.stdout.flush()
+        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2]); sys.stdout.flush()
         FIDdata[last_x+1-npoints_x:dim[0],:,:] += compl_conjugate_x[:,:,:]       
         last_x=dim[0]-first_x
         compl_conjugate_x = 0 # free memory     
@@ -535,9 +540,9 @@ if partial_fourrier:
         FIDdata[:,:,last_z+1-npoints_z:dim[2]] += compl_conjugate_z[:,:,:]       
         last_z=dim[2]-first_z 
         compl_conjugate_z = 0 # free memory
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
 else: #partial fourier recon disabled    
-    print('|', end='') #progress indicator
+    print('|', end=''); sys.stdout.flush() #progress indicator
     
 #Hanning filter
 percentage = 10.
@@ -548,7 +553,7 @@ hanning_x [first_x:first_x+npoints_x] = np.power(np.sin(x_),2)
 hanning_x [first_x+npoints_x:last_x-npoints_x+1] = 1
 x_ = x_[::-1] # reverse x_
 hanning_x [last_x-npoints_x+1:last_x+1] = np.power(np.sin(x_),2)
-#print (hanning_x)
+#print (hanning_x); sys.stdout.flush()
 FIDdata[:,:,:] *= hanning_x [:,None,None,None]
 npoints_y = int(float(dim[1]/zero_fill)*percentage/100.)
 hanning_y = np.zeros(shape=(dim[1]),dtype=np.float32)
@@ -557,7 +562,7 @@ hanning_y [first_y:first_y+npoints_y] = np.power(np.sin(y_),2)
 hanning_y [first_y+npoints_y:last_y-npoints_y+1] = 1
 y_ = y_[::-1] # reverse y_
 hanning_y [last_y-npoints_y+1:last_y+1] = np.power(np.sin(y_),2)
-#print (hanning_y)
+#print (hanning_y); sys.stdout.flush()
 FIDdata[:,:,:] *= hanning_y [None,:,None,None]
 npoints_z = int(float(dim[2]/zero_fill)*percentage/100.)
 hanning_z = np.zeros(shape=(dim[2]),dtype=np.float32)
@@ -566,9 +571,9 @@ hanning_z [first_z:first_z+npoints_z] = np.power(np.sin(z_),2)
 hanning_z [first_z+npoints_z:last_z-npoints_z+1] = 1
 z_ = z_[::-1] # reverse z_
 hanning_z [last_z-npoints_z+1:last_z+1] = np.power(np.sin(z_),2)
-#print (hanning_z)
+#print (hanning_z); sys.stdout.flush()
 FIDdata[:,:,:] *= hanning_z [None,None,:,None]
-print('.', end='') #progress indicator      
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 
 #FFT
@@ -577,7 +582,7 @@ FIDdata = 0 #free memory
 IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))
 for i in range(NEchoes): IMGdata[:,:,:,i] = FFT3D(IMGdata[:,:,:,i])
 IMGdata = np.fft.fftshift(IMGdata, axes=(0,1,2))          
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 
 #throw out antialiasing
@@ -591,9 +596,9 @@ if anti_alias:
     dim2end = int(dim2start+dim[2]/crop[2])
     IMGdata = IMGdata[dim0start:dim0end,dim1start:dim1end,dim2start:dim2end,:]
     dim=IMGdata.shape
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
 else:  
-    print('!', end='') #progress indicator    
+    print('!', end=''); sys.stdout.flush() #progress indicator
 
 #permute dimensions
 #worx for PVM_SPackArrSliceOrient=sagittal, PVM_SPackArrReadOrient="H_F"
@@ -619,6 +624,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
+        sys.stdout.flush()
 elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
     if METHODdata["PVM_SPackArrReadOrient"] == "L_R":
         SpatResol_perm = SpatResol
@@ -634,6 +640,7 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "axial":
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
+        sys.stdout.flush()
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
     if METHODdata["PVM_SPackArrReadOrient"] == "H_F":
         SpatResol_perm = np.empty(shape=(3))
@@ -648,12 +655,14 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
         print ('         resulting images may be rotated incorrectly');
+        sys.stdout.flush()
 else:
     SpatResol_perm=SpatResol
     print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
             METHODdata["PVM_SPackArrReadOrient"]);
-    print ('         resulting images may be rotated incorrectly');         
-print('.', end='') #progress indicator
+    print ('         resulting images may be rotated incorrectly');
+    sys.stdout.flush()    
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 # use noise in all 8 corners to establish threshold
 N=10 # use 10% at the corners of the FOV
@@ -727,7 +736,7 @@ IMGdata_ABS = np.abs(IMGdata)/ReceiverGain/n_Averages;
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 IMGdata_PH  = np.angle(IMGdata)*mask; # use this to mask out background noise
 max_PH = np.pi; 
 IMGdata_PH *= 32767./max_PH
@@ -735,7 +744,7 @@ IMGdata_PH = IMGdata_PH.astype(np.int16)
 # set max/min in 0,0,0/1,1,1 corners
 IMGdata_PH [0,0,0] = 32767
 IMGdata_PH [1,1,1] = -32767  
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 
 # calc sum of all echoes
 if  METHODdata["Method"] == "MGE":
@@ -745,7 +754,7 @@ IMGdata_AVG = IMGdata_AVG/ReceiverGain/n_Averages;
 max_AVG = np.amax(IMGdata_AVG);
 IMGdata_AVG *= 32767./max_AVG
 IMGdata_AVG = IMGdata_AVG.astype(np.int16)
-print('.', end='') #progress indicator
+print('.', end=''); sys.stdout.flush() #progress indicator
 IMGdata=0 # free memory
 
 #save NIFTI
@@ -779,24 +788,25 @@ NIFTIimg_PH.set_qform(aff, code=1)
 
 #write
 try:
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     nib.save(NIFTIimg_AVG, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_AVG.nii.gz')) 
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
     print('.', end='') #progress indicator
     nib.save(NIFTIimg_ABS_masked, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAG_m.nii.gz')) 
-    print('.', end='') #progress indicator
+    print('.', end=''); sys.stdout.flush() #progress indicator
     nib.save(NIFTIimg_PH , os.path.join(os.path.dirname(FIDfile),OrigFilename+'_PHASE.nii.gz'))
 except:
     print ('\nERROR:  problem while writing results'); sys.exit(1)
-print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')   
+print ('\nSuccessfully written output files '+OrigFilename+'_MAGNT/PHASE.nii.gz')
+sys.stdout.flush()
 
 #end
 if sys.platform=="win32": os.system("pause") # windows
 else: 
     #os.system('read -s -n 1 -p "Press any key to continue...\n"')
     import termios
-    print("Press any key to continue...")
+    print("Press any key to continue..."); sys.stdout.flush()
     fd = sys.stdin.fileno()
     oldterm = termios.tcgetattr(fd)
     newattr = termios.tcgetattr(fd)
