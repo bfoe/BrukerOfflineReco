@@ -6,6 +6,8 @@
 #
 # Version 0.1 - 20, February 2019
 #       - 1st public github Release
+# Version 0.2 - 21, August 2019
+#       - Python v3.7 compatibility
 #
 # ----- LICENSE -----                 
 #
@@ -107,7 +109,7 @@ def worker_curvefit(TE,IMGdata,p,T2_clip,R2_clip):
     data_R2map  = np.zeros((IMGdata.shape[0]),dtype=np.float32)
     data_TE0map = np.zeros((IMGdata.shape[0]),dtype=np.float32)    
     for i in range(IMGdata.shape[0]):
-       if i%p==0: print ('.',end='')
+       if i%p==0: print ('.',end=''); sys.stdout.flush()
        #filter     
        zeros = np.nonzero (IMGdata[i,:]==0)[0]
        zeros = np.append  (zeros,IMGdata.shape[1])      
@@ -126,7 +128,7 @@ def worker_zoom(IMGdata,p):
     z=2
     zoomed = np.zeros((IMGdata.shape[0]*z,IMGdata.shape[1]*z,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
     for i in range(IMGdata.shape[3]):
-       if i%p==0: print ('.',end='')
+       if i%p==0: print ('.',end=''); sys.stdout.flush()
        zoomed[:,:,:,i] = zoom(IMGdata[:,:,:,i],[z,z,1],order=2)
     return zoomed
 
@@ -146,7 +148,8 @@ def usage():
     print ('       --nofiltering     : skip filtering')
     print ('       --version         : version information')
     print ('       -h --help         : this page')    
-    print ('')        
+    print ('')
+    sys.stdout.flush()    
 
 if __name__ == '__main__':
     mp.freeze_support() #required for pyinstaller 
@@ -156,6 +159,7 @@ if __name__ == '__main__':
     if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
     Program_name = os.path.basename(sys.argv[0]); 
     if Program_name.find('.')>0: Program_name = Program_name[:Program_name.find('.')]
+    Program_version = "v0.2" # program version
     python_version=str(sys.version_info[0])+'.'+str(sys.version_info[1])+'.'+str(sys.version_info[2])
     # sys.platform = [linux2, win32, cygwin, darwin, os2, os2emx, riscos, atheos, freebsd7, freebsd8]
     if sys.platform=="win32": os.system("title "+Program_name)
@@ -215,7 +219,7 @@ if __name__ == '__main__':
     outfile2 = basename+'_R2map.nii.gz'
     outfile3 = basename+'_TE0map.nii.gz'
     
-    print ('Reading NIFTI file')
+    print ('Reading NIFTI file'); sys.stdout.flush()
     img = nib.load(InputFile)
     IMGdata = img.get_data().astype(np.float32)
     SpatResol = np.asarray(img.header.get_zooms())
@@ -225,7 +229,7 @@ if __name__ == '__main__':
     xyzt_units2  = img.header.get_xyzt_units()[1]
     sform = int(img.header['sform_code'])
     qform = int(img.header['qform_code'])
-    TE_str = str(img.header['descrip']).split('\t')  
+    TE_str = str(img.header['descrip']).replace("b'","").replace("'","").replace("\\t","\t").split('\t')
     try: TE1 = float(TE_str[0][6:])
     except: print ("ERROR: parsing TE information from header"); sys.exit(1)
     if len(TE_str)>1:
@@ -237,7 +241,7 @@ if __name__ == '__main__':
     TE_str = np.array2string(TE,max_line_width=1000)
     TE_str = TE_str.replace('.]','').replace(']','').replace('[','')
     TE_str = TE_str.replace('. ',' ').replace('  ',' ')
-    print ("TE's ="+TE_str)
+    print ("TE's ="+TE_str); sys.stdout.flush()
     
     #check some stuff
     if len(IMGdata.shape) != 4:
@@ -306,7 +310,7 @@ if __name__ == '__main__':
     # analyze histogram to find 1% higest intensity points of last echo image
     if not noechocorrection:
         n_points=IMGdata.shape[0]*IMGdata.shape[1]*IMGdata.shape[2]
-        steps=np.sqrt(n_points); start=0; fin=np.max(IMGdata [:,:,:,-1])
+        steps=int(np.sqrt(n_points)); start=0; fin=np.max(IMGdata [:,:,:,-1])
         xbins =  np.linspace(start,fin,steps)
         ybins, binedges = np.histogram(IMGdata [:,:,:,-1], bins=xbins)
         i=len(ybins)-1
@@ -332,27 +336,30 @@ if __name__ == '__main__':
         corr = first_echo_expected/longT2_data[0]    
         if rmse>0.05: #5% RMS error limit
            print ('1st echo correction skipped (RMS error too high)')
+           sys.stdout.flush()
         elif corr<=1:
-           print ('1st echo correction skipped (correction factor < 1.0)')    
+           print ('1st echo correction skipped (correction factor < 1.0)')
+           sys.stdout.flush()    
         else: #do correction
            print ('1st echo correction factor is %0.2f' % corr)
+           sys.stdout.flush()
            IMGdata [:,:,:,0] *= corr
        
     if not nointerpolation:
         #increase resolution 2x
         #IMGdata = zoom(IMGdata,[2,2,1,1],order=2) #simple non-mp code
         if np.prod(IMGdata.shape)>1000000000: #single process with progress indicator
-            print ('Increase resolution 2x')    
+            print ('Increase resolution 2x'); sys.stdout.flush()    
             zoomed = np.zeros((IMGdata.shape[0]*2,IMGdata.shape[1]*2,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32)
             for i in range(IMGdata.shape[3]):
-                print ('.',end='') #progress indicator    
+                print ('.',end=''); sys.stdout.flush() #progress indicator    
                 zoomed [:,:,:,i] = zoom(IMGdata[:,:,:,i],[2,2,1],order=2) #simple non-mp code
-            print ('')
+            print (''); sys.stdout.flush()
             IMGdata = zoomed    
             zoomed=0 #free memory    
         else: #multiprocessing
             cores_min = min (cores,IMGdata.shape[3])  
-            print ('Increase resolution 2x using',cores_min,'cores')
+            print ('Increase resolution 2x using',cores_min,'cores'); sys.stdout.flush()
             p = mp.Pool(cores_min)
             return_vals=[]
             progress_tag = int(math.ceil(IMGdata.shape[3]/70.))
@@ -369,7 +376,7 @@ if __name__ == '__main__':
             IMGdata = return_vals[0].get()     
             for i in range(1,cores_min):
                 IMGdata = np.concatenate ((IMGdata, return_vals[i].get()),axis=3)
-            print ('') 
+            print (''); sys.stdout.flush() 
     
     # calculate mask
     # use noise in all 8 corners to establish threshold
@@ -450,7 +457,7 @@ if __name__ == '__main__':
     IMGdata = IMGdata [mask,:]
     
     #T2map calculation  
-    print ('Start fitting using', cores, 'cores')
+    print ('Start fitting using', cores, 'cores'); sys.stdout.flush()
     #set up multiprocessing
     p = mp.Pool(cores)
     return_vals=[]
@@ -476,7 +483,7 @@ if __name__ == '__main__':
         temp_T2map  = np.concatenate ((temp_T2map, return_vals[i].get()[0]))
         temp_R2map  = np.concatenate ((temp_R2map, return_vals[i].get()[1]))
         temp_TE0map = np.concatenate ((temp_TE0map, return_vals[i].get()[2]))        
-    print ('')        
+    print (''); sys.stdout.flush()        
 
     #undo vector reduction
     data_T2map  = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
@@ -495,7 +502,7 @@ if __name__ == '__main__':
     if not nointerpolation:
         if not nofiltering:
             if not filter3D: #filter 2D
-                print ('2D Filter T2 map')
+                print ('2D Filter T2 map'); sys.stdout.flush()
                 for i in range(dim[2]):
                    data_T2map[:,:,i]  = median_filter  (data_T2map[:,:,i], size = (5,5))
                    data_T2map[:,:,i]  = gaussian_filter(data_T2map[:,:,i], sigma=0.7)
@@ -504,7 +511,7 @@ if __name__ == '__main__':
                    data_TE0map[:,:,i] = median_filter  (data_TE0map[:,:,i], size = (5,5))
                    data_TE0map[:,:,i] = gaussian_filter(data_TE0map[:,:,i], sigma=0.7)                   
             else: # 3D filter
-                print ('3D Filter T2 map')
+                print ('3D Filter T2 map'); sys.stdout.flush()
                 data_T2map  = median_filter  (data_T2map, size = (3,3,3))
                 data_T2map  = gaussian_filter(data_T2map, sigma=0.4)
                 data_R2map  = median_filter  (data_R2map, size = (3,3,3))
@@ -512,14 +519,14 @@ if __name__ == '__main__':
                 data_TE0map = median_filter  (data_TE0map, size = (3,3,3))
                 data_TE0map = gaussian_filter(data_TE0map, sigma=0.4)                
         #decrease resolution
-        print ('Decrease resolution 2x')
+        print ('Decrease resolution 2x'); sys.stdout.flush()
         data_T2map  = zoom(data_T2map,[0.5,0.5,1],order=1)
         data_R2map  = zoom(data_R2map,[0.5,0.5,1],order=1)
         data_TE0map = zoom(data_TE0map,[0.5,0.5,1],order=1)        
     else: 
         if not nofiltering: # no resolution increase but filter yes (uses lower filter values)
             if not filter3D: #filter 2D
-                print ('2D Filter T2 map')
+                print ('2D Filter T2 map'); sys.stdout.flush()
                 for i in range(dim[2]):
                    data_T2map[:,:,i]  = median_filter  (data_T2map[:,:,i], size = (3,3))
                    data_T2map[:,:,i]  = gaussian_filter(data_T2map[:,:,i], sigma=0.2)
@@ -528,7 +535,7 @@ if __name__ == '__main__':
                    data_TE0map[:,:,i] = median_filter  (data_TE0map[:,:,i], size = (3,3))
                    data_TE0map[:,:,i] = gaussian_filter(data_TE0map[:,:,i], sigma=0.2)                    
             else: # 3D filter
-                print ('3D Filter T2 map')
+                print ('3D Filter T2 map'); sys.stdout.flush()
                 data_T2map  = median_filter  (data_T2map, size = (3,3,3))
                 data_T2map  = gaussian_filter(data_T2map, sigma=0.2)
                 data_R2map  = median_filter  (data_R2map, size = (3,3,3))
@@ -568,13 +575,13 @@ if __name__ == '__main__':
        nib.save(R2_img, os.path.join(dirname,outfile2)) 
        nib.save(TE0_img,os.path.join(dirname,outfile3))         
     except: print ('ERROR:  problem while writing results'); exit(1)
-    print ('Successfully written output files')
+    print ('Successfully written output files'); sys.stdout.flush()
 
     if sys.platform=="win32": os.system("pause") # windows
     else: 
         #os.system('read -s -n 1 -p "Press any key to continue...\n"')
         import termios
-        print("Press any key to continue...")
+        print("Press any key to continue..."); sys.stdout.flush()
         fd = sys.stdin.fileno()
         oldterm = termios.tcgetattr(fd)
         newattr = termios.tcgetattr(fd)
