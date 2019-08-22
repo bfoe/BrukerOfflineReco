@@ -465,7 +465,7 @@ if __name__ == '__main__':
     R2_clip_factor=1/3. # factor of min(TE) where to start clipping R2
     T2_clip = np.max(TE)*T2_clip_factor
     R2_clip = np.min(TE)*R2_clip_factor
-    progress_tag = IMGdata.shape[0]/70
+    progress_tag = int(IMGdata.shape[0]/70)
     for i in range(cores):
         workpiece=int(math.ceil(float(IMGdata.shape[0])/float(cores)))
         start = i*workpiece
