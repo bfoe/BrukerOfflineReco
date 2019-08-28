@@ -250,13 +250,14 @@ ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
 ybins = smooth(ybins,21)
 max_index = np.argmax(ybins)
 maximum = float(ybins[max_index])
+i=max_index
 while i<ybins.shape[0]-1:
     i+=1
     if ybins[i] < 0.5*maximum: fwhm_index = i; i = ybins.shape[0]   
-threshold_index = max_index + 5*(fwhm_index-max_index)
-threshold = xbins[threshold_index]     
+threshold_index = max_index + 50*(fwhm_index-max_index)
+threshold = xbins[threshold_index]    
 '''
-threshold=np.max(mag)*0.01 # 1%
+threshold=np.max(mag)*0.02 # 2%
 print ("Threshold set to %0.3f" % threshold)
 logfile.write("Threshold set to %0.3f\n" % threshold)
 
@@ -303,29 +304,33 @@ while not OK:
     try: input_cor = float(dummy); OK=True
     except: print ("Input Error")
 logfile.write('Average  flow volume '+str(avg_flow_volume)+'\n')
-if input_cor!=avg_flow_volume: logfile.write('Adjusted flow volume '+str(input_cor)+'\n') 
-input_cor /= avg_flow_volume   
-# prepare adjust
-flowvol = np.abs(flowvol)
-flowvol = smooth(flowvol,40)
-flowvol_normalize = np.zeros(flowvol.shape, dtype=np.float32)
-flowvol_normalize.fill (1.0)
-nzero = np.nonzero(flowvol)
-flowvol_avg = np.average(flowvol[nzero])
-flowvol_normalize [nzero] = input_cor*flowvol_avg/flowvol[nzero]
-# do adjust
-if flow_directions[0]==0:
-    for i in range(0,arr.shape[0]): 
-        arr [i,:,:,:] *= flowvol_normalize[i]
-elif flow_directions[0]==1:           
-    for i in range(0,arr.shape[1]): 
-        arr [:,i,:,:] *= flowvol_normalize[i]
-elif flow_directions[0]==2:           
-    for i in range(0,arr.shape[2]): 
-        arr [:,:,i,:] *= flowvol_normalize[i]
-else:
-    print ("Error: unknown case for main flow direction ", flow_directions[0] )
-    sys.exit(0)    
+if input_cor ==0: 
+    logfile.write('Flow volume equalization disabled\n')
+else: 
+    if input_cor!=avg_flow_volume: 
+       logfile.write('Adjusted flow volume '+str(input_cor)+'\n')
+    input_cor /= avg_flow_volume
+    # prepare adjust
+    flowvol = np.abs(flowvol)
+    flowvol = smooth(flowvol,40)
+    flowvol_normalize = np.zeros(flowvol.shape, dtype=np.float32)
+    flowvol_normalize.fill (1.0)
+    nzero = np.nonzero(flowvol)
+    flowvol_avg = np.average(flowvol[nzero])
+    flowvol_normalize [nzero] = input_cor*flowvol_avg/flowvol[nzero]
+    # do adjust
+    if flow_directions[0]==0:
+        for i in range(0,arr.shape[0]): 
+            arr [i,:,:,:] *= flowvol_normalize[i]
+    elif flow_directions[0]==1:           
+        for i in range(0,arr.shape[1]): 
+            arr [:,i,:,:] *= flowvol_normalize[i]
+    elif flow_directions[0]==2:           
+        for i in range(0,arr.shape[2]): 
+            arr [:,:,i,:] *= flowvol_normalize[i]
+    else:
+        print ("Error: unknown case for main flow direction ", flow_directions[0] )
+        sys.exit(0)    
 
 
 # convert Numpy Array back to ITK (component wise, directly not worx)
