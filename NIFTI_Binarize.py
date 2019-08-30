@@ -35,11 +35,8 @@
 #    with the following additional libraries: 
 #    - numpy
 #    - nibabel
-#    - ANTs executables:
-#       1) N4BiasFieldCorrection.exe
-#       2) Atropos.exe
-#      from:
-#      https://github.com/ANTsX/ANTs/releases/tag/v2.1.0
+#    - ANTs executable: Atropos.exe
+#      from: https://github.com/ANTsX/ANTs/releases/tag/v2.1.0
 #
 
 
@@ -157,9 +154,7 @@ signal.signal(signal.SIGTERM, signal_handler) # kill/shutdown
 if  'SIGHUP' in dir(signal): signal.signal(signal.SIGHUP, signal_handler)  # shell exit (linux)
 #check for external executables
 if not os.path.isfile(os.path.join(resourcedir,'Atropos.exe')):
-    print ('ERROR:  Atropos executable not found '); exit(1)
-if not os.path.isfile(os.path.join(resourcedir,'N4BiasFieldCorrection.exe')):
-    print ('ERROR:  N4BiasFieldCorrection executable not found '); exit(1)       
+    print ('ERROR:  Atropos executable not found '); exit(1)      
    
 #TK initialization       
 TKwindows = tk.Tk(); TKwindows.withdraw() #hiding tkinter window
@@ -206,15 +201,14 @@ try: os.mkdir (tempdir)
 except: lprint ('ERROR:  Problem creating temp dir: '+tempdir); exit(1)
 
 #temp filenames
-infile0 = os.path.join(tempdir,'input.nii.gz')
-infile1 = os.path.join(tempdir,'input_biascorrected.nii.gz')
+infile = os.path.join(tempdir,'input.nii.gz')
 maskfile = os.path.join(tempdir,'mask.nii.gz')
 
 #copy NIFTI file to tempdir
-copyfile (FIDfile, infile0)
+copyfile (FIDfile, infile)
 
 #create mask file (just a file with ones)
-img = nib.load(infile0)
+img = nib.load(infile)
 data = img.get_data().astype(np.float32)
 SpatResol = np.asarray(img.header.get_zooms())
 Shape = np.asarray(img.header.get_data_shape())
@@ -233,19 +227,12 @@ try: nib.save(img, maskfile)
 except: print ('ERROR:  Problem writing temporary mask file'); exit(1)
 del img; del data # free memory
 
-#bias field correction  
-lprint ('Start bias field correction')     
-command = '"'+os.path.join(resourcedir,'N4BiasFieldCorrection.exe')+'" '
-command +='-d 3 '
-command +='-i "'+infile0+'" '
-command +='-o "'+infile1+'" '
-run (command)
 
 #segmentation  
 lprint ('Start binarization')     
 command = '"'+os.path.join(resourcedir,'Atropos.exe')+'" '
 command +='-d 3 '
-command +='-a "'+infile1+'" '
+command +='-a "'+infile+'" '
 command +='-i kmeans[4] -p Socrates[1] '
 command +='-x "'+maskfile+'" '
 command +='-m [0.1,1x1x1] '
