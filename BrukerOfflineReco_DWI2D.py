@@ -191,7 +191,7 @@ try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
 #read FID 
-with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
@@ -232,7 +232,7 @@ dim=METHODdata["PVM_EncMatrix"]
 dim2=METHODdata["PVM_DwAoImages"] + METHODdata["PVM_DwNDiffDir"]*METHODdata["PVM_DwNDiffExpEach"]
 dim0 = dim[0]; dim0_mod_128 = dim0%128
 if dim0_mod_128!=0: dim0=(int(dim0/128)+1)*128 # Bruker sets readout point to a multiple of 128
-dim=[dim0,METHODdata["PVM_SPackArrNSlices"],dim2,dim[1]]# insert slice and diffusion direction dimensions
+dim=[dim[0],METHODdata["PVM_SPackArrNSlices"],dim2,dim[1]]# insert slice and diffusion direction dimensions
 try: FIDrawdata_CPX = FIDrawdata_CPX.reshape(dim0,dim[1],dim[2],dim[3], order="F")
 except: print ('ERROR: k-space data reshape failed (dimension problem)'); sys.exit(1)
 if dim0 != dim[0]: FIDrawdata_CPX = FIDrawdata_CPX[0:dim[0],:,:,:]     
@@ -242,8 +242,8 @@ if METHODdata["PVM_EncPftAccel1"] != 1:
 #   zeros_ = np.zeros (shape=(dim[0],dim[1],dim[2],int(dim[3]*(float(METHODdata["PVM_EncPftAccel1"])-1.))))
    zeros_ = np.zeros (shape=(dim[0],dim[1],dim[2],int(ceil(dim[3]*(float(METHODdata["PVM_EncPftAccel1"])-1.)))))
    FIDrawdata_CPX = np.append (FIDrawdata_CPX, zeros_,axis=3)
-   dim=FIDrawdata_CPX.shape
-
+   dim=FIDrawdata_CPX.shape 
+   
 #reorder data
 FIDdata_tmp=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
 FIDdata=np.empty(shape=(dim[0],dim[1],dim[2],dim[3]),dtype=np.complex64)
@@ -256,7 +256,7 @@ if dim[1]>1: # more than one slice
 else: # only one slice
    FIDdata=FIDdata_tmp
 FIDdata_tmp = 0 #free memory  
-print('.', end='') #progress indicator
+print('.', end='') #progress indicator 
 
 # apply FOV offsets = (linear phase in k-space)
 PackArrPhase1Offset=METHODdata["PVM_SPackArrPhase1Offset"]
@@ -282,7 +282,7 @@ FIDdata_ZF[dim0start:dim0start+dim[0],:,:,dim3start:dim3start+dim[3]] = \
 FIDdata=FIDdata_ZF;
 FIDdata_ZF = 0 #free memory 
 dim=FIDdata.shape
-print('.', end='') #progress indicator
+print('.', end='') #progress indicator 
 
 #roll partial echo (at Bruker aka echo position)
 EchoPosition_raw=METHODdata["PVM_EchoPosition"]
