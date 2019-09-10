@@ -176,7 +176,10 @@ def usage():
     print ('       --version     : version information')
     print ('       -h --help     : this page')    
     print ('')        
-       
+
+def RG_to_voltage(RG):
+    return np.exp(12./20.) * np.power(RG,8.65709848524054/20.) 
+    
 #general initialization stuff  
 space=' '; slash='/'; 
 if sys.platform=="win32": slash='\\' # not really needed, but looks nicer ;)
@@ -233,7 +236,7 @@ if FIDfile == "":
     except: pass #silent
 
 #read FID 
-with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
@@ -702,7 +705,7 @@ mask =  abs(IMGdata [:,:,:]) > threshold
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
 n_Averages = METHODdata["PVM_NAverages"]
-IMGdata_ABS = np.abs(IMGdata)/ReceiverGain/n_Averages; 
+IMGdata_ABS = np.abs(IMGdata)/RG_to_voltage(ReceiverGain)/n_Averages; 
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
