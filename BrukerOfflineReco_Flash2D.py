@@ -147,7 +147,96 @@ def FFT2D (array):
 def iFFT2D (array):
     for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.ifft(array[:,k,:,:], axis=(0))
     for k in range(0,array.shape[1]): array[:,k,:,:] = np.fft.ifft(array[:,k,:,:], axis=(1))   
-    return array     
+    return array 
+    
+def RG_to_voltage(RG):
+    return np.power(10,11.995/20.) * np.power(RG,19.936/20.)
+    # this comes from the Bruker provided conversion list below
+    #
+    #
+    # Receiver,   Gain Equivalent Voltage Gain [dB],        V_out/V_in
+    #             20*log (V_out/V_in)
+    #
+    # 2050,       78,	                                    7943.282347	
+    # 1820,       77,	                                    7079.457844	
+    # 1620,       76,	                                    6309.573445	
+    # 1440,       75,	                                    5623.413252	
+    # 1290,       74,	                                    5011.872336	
+    # 1150,       73,	                                    4466.835922	
+    # 1030,       72,	                                    3981.071706	
+    # 912,        71,	                                    3548.133892	
+    # 812,        70,	                                    3162.27766	
+    # 724,        69,	                                    2818.382931	
+    # 645,        68,	                                    2511.886432	
+    # 575,        67,	                                    2238.721139	
+    # 512,        66,	                                    1995.262315	
+    # 456,        65,	                                    1778.27941	
+    # 406,        64,	                                    1584.893192	
+    # 362,        63,	                                    1412.537545	
+    # 322,        62,	                                    1258.925412	
+    # 287,        61,	                                    1122.018454	
+    # 256,        60,	                                    1000	    
+    # 228,        59,	                                    891.2509381	
+    # 203,        58,	                                    794.3282347	
+    # 181,        57,	                                    707.9457844	
+    # 161,        56,	                                    630.9573445	
+    # 144,        55,	                                    562.3413252	
+    # 128,        54,	                                    501.1872336	
+    # 114,        53,	                                    446.6835922	
+    # 101,        52,	                                    398.1071706	
+    # 90.5,       51,	                                    354.8133892	
+    # 80.6,       50,	                                    316.227766	
+    # 71.8,       49,	                                    281.8382931	
+    # 64,         48,	                                    251.1886432	
+    # 57,         47,	                                    223.8721139	
+    # 50.8,       46,	                                    199.5262315	
+    # 45.2,       45,	                                    177.827941	
+    # 40.3,       44,	                                    158.4893192	
+    # 36,         43,	                                    141.2537545	
+    # 32,         42,	                                    125.8925412	
+    # 28.5,       41,	                                    112.2018454	
+    # 25.4,       40,	                                    100	        
+    # 22.6,       39,	                                    89.12509381	
+    # 20.2,       38,	                                    79.43282347	
+    # 18,         37,	                                    70.79457844	
+    # 16,         36,	                                    63.09573445	
+    # 14.2,       35,	                                    56.23413252	
+    # 12.7,       34,	                                    50.11872336	
+    # 11.3,       33,	                                    44.66835922	
+    # 10,         32,	                                    39.81071706	
+    # 9,    	  31,	                                    35.48133892	
+    # 8,          30,	                                    31.6227766	
+    # 7.12,       29,	                                    28.18382931	
+    # 6.35,       28,	                                    25.11886432	
+    # 5.6,        27,	                                    22.38721139	
+    # 5,          26,	                                    19.95262315	
+    # 4.5,        25,	                                    17.7827941	
+    # 4,          24,	                                    15.84893192	
+    # 3.56,       23,	                                    14.12537545	
+    # 3.2,        22,	                                    12.58925412	
+    # 2.8,        21,	                                    11.22018454	
+    # 2.56,       20,	                                    10	        
+    # 2.25,       19,	                                    8.912509381	
+    # 2,          18,	                                    7.943282347	
+    # 1.78,       17,	                                    7.079457844	
+    # 1.6,        16,	                                    6.309573445	
+    # 1.4,        15,	                                    5.623413252	
+    # 1.28,       14,	                                    5.011872336	
+    # 1.12,       13,	                                    4.466835922	
+    # 1,          12,	                                    3.981071706	
+    # 0.89,       11,	                                    3.548133892	
+    # 0.8,        10,	                                    3.16227766	
+    # 0.7,        9,                                        2.818382931	
+    # 0.64,       8,	                                    2.511886432	
+    # 0.56,       7,                                        2.238721139	
+    # 0.5,        6,	                                    1.995262315	
+    # 0.44,       5,	                                    1.77827941	
+    # 0.4,        4,	                                    1.584893192	
+    # 0.35,       3,	                                    1.412537545	
+    # 0.32,       2,	                                    1.258925412	
+    # 0.28,       1,	                                    1.122018454	
+    # 0.25,       0,	                                    1	  
+
     
 #general initialization stuff  
 space=' '; slash='/'; 
@@ -181,7 +270,7 @@ try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
 #read FID 
-with open(FIDfile, "r") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
+with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
 FIDrawdata = 0 #free memory
 
@@ -470,11 +559,38 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal":
         SpatResol_perm[2]=SpatResol[1]    
         IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))
         IMGdata = IMGdata[::-1,:,:,:] # flip axis
+    elif METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[0]
+        SpatResol_perm[1]=SpatResol[2]
+        SpatResol_perm[2]=SpatResol[1]    
+        IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))
+        IMGdata = IMGdata[::-1,:,:,:] # flip axis         
     else:
         SpatResol_perm=SpatResol
         print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
                 METHODdata["PVM_SPackArrReadOrient"]);
-        print ('         resulting images may be rotated incorrectly');    
+        print ('         resulting images may be rotated incorrectly');
+elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
+    if METHODdata["PVM_SPackArrReadOrient"] == "L_R":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[0]
+        SpatResol_perm[1]=SpatResol[2]
+        SpatResol_perm[2]=SpatResol[1]
+        IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))        
+        IMGdata = IMGdata[::-1,:,::-1,::-1] # flip axis 
+    elif METHODdata["PVM_SPackArrReadOrient"] == "H_F":
+        SpatResol_perm = np.empty(shape=(3))
+        SpatResol_perm[0]=SpatResol[0]
+        SpatResol_perm[1]=SpatResol[2]
+        SpatResol_perm[2]=SpatResol[1]
+        IMGdata = np.transpose (IMGdata, axes=(0,2,1,3))
+        IMGdata = np.rot90(IMGdata, k=1, axes=(0,1)) # rotate (90 deg)          
+    else:
+        SpatResol_perm=SpatResol
+        print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
+                METHODdata["PVM_SPackArrReadOrient"]);
+        print ('         resulting images may be rotated incorrectly');                    
 else:
     SpatResol_perm=SpatResol
     print ('Warning: unknown Orientation',METHODdata["PVM_SPackArrSliceOrient"],
@@ -515,57 +631,57 @@ N=10 # use 10% at the corners of the FOV
 tresh=np.empty(shape=8,dtype=np.float)
 avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=0; yend=int(IMGdata.shape[1]/N)
+xstart=0; xend=int(ceil(float(IMGdata.shape[0])/float(N)))
+ystart=0; yend=int(ceil(float(IMGdata.shape[1])/float(N)))
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[0]=np.mean(arr)
 std[0]=np.std(arr)
 tresh[0]=avg[0] + 4*std[0]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=0; yend=int(IMGdata.shape[1]/N)
+xstart=int(floor(float(IMGdata.shape[0])-float(IMGdata.shape[0])/float(N))); xend=IMGdata.shape[0]
+ystart=0; yend=int(ceil(float(IMGdata.shape[1])/float(N)))
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[1]=np.mean(arr)
 std[1]=np.std(arr)
 tresh[1]=avg[1] + 4*std[1]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+xstart=0; xend=int(ceil(float(IMGdata.shape[0])/float(N)))
+ystart=int(floor(float(IMGdata.shape[1])-float(IMGdata.shape[1])/float(N))); yend=IMGdata.shape[1]
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[2]=np.mean(arr)
 std[2]=np.std(arr)
 tresh[2]=avg[2] + 4*std[2]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+xstart=int(floor(float(IMGdata.shape[0])-float(IMGdata.shape[0])/float(N))); xend=IMGdata.shape[0]
+ystart=int(floor(float(IMGdata.shape[1])-float(IMGdata.shape[1])/float(N))); yend=IMGdata.shape[1]
 zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[3]=np.mean(arr)
 std[3]=np.std(arr)
 tresh[3]=avg[3] + 4*std[3]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=0; yend=int(IMGdata.shape[1]/N)
+xstart=0; xend=int(ceil(float(IMGdata.shape[0])/float(N)))
+ystart=0; yend=int(ceil(float(IMGdata.shape[1])/float(N)))
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[4]=np.mean(arr)
 std[4]=np.std(arr)
 tresh[4]=avg[4] + 4*std[4]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=0; yend=int(IMGdata.shape[1]/N)
+xstart=int(floor(float(IMGdata.shape[0])-float(IMGdata.shape[0])/float(N))); xend=IMGdata.shape[0]
+ystart=0; yend=int(ceil(float(IMGdata.shape[1])/float(N)))
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
 avg[5]=np.mean(arr)
 std[5]=np.std(arr)
 tresh[5]=avg[5] + 4*std[5]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+xstart=0; xend=int(ceil(float(IMGdata.shape[0])/float(N)))
+ystart=int(floor(float(IMGdata.shape[1])-float(IMGdata.shape[1])/float(N))); yend=IMGdata.shape[1]
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[6]=np.mean(arr)
 std[6]=np.std(arr)
 tresh[6]=avg[6] + 4*std[6]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+xstart=int(floor(float(IMGdata.shape[0])-float(IMGdata.shape[0])/float(N))); xend=IMGdata.shape[0]
+ystart=int(floor(float(IMGdata.shape[1])-float(IMGdata.shape[1])/float(N))); yend=IMGdata.shape[1]
 zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
 arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 avg[7]=np.mean(arr)
@@ -585,7 +701,7 @@ else:
 #transform to int
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
 n_Averages = METHODdata["PVM_NAverages"]
-IMGdata_ABS = np.abs(IMGdata)/ReceiverGain/n_Averages; 
+IMGdata_ABS = np.abs(IMGdata)/RG_to_voltage(ReceiverGain)/n_Averages; 
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
