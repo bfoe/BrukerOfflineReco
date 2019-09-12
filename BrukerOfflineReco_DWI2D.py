@@ -223,7 +223,10 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
 #start
 print ('Starting recon') 
 bvec = np.asarray([0])
-bvec = np.append (bvec, METHODdata["PVM_DwBvalEach"]).astype(int)  
+bvec = np.append (bvec, METHODdata["PVM_DwBvalEach"]).astype(int)
+bvec_str = np.array2string(bvec).replace("[","").replace("]","")
+bvec_str = bvec_str.replace("    "," ").replace("   "," ").replace("  "," ").replace(" ",",")
+bvec_str = bvec_str[1:len(bvec_str)]
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
@@ -299,63 +302,65 @@ percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
 percentual_inc_z=float(last_z+first_z+1-dim[3])/float(last_z-first_z)*100.
 print('.', end='') #progress indicator
 
+# do this independently on Partial Fourrier, cause we do complex averaging
+#low pass filter for phase correction (function: 1-hanning^2)
+percentage = 10 # center only (lowpass)
+FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
+FIDlowpass [:,:,:,:] = FIDdata [:,:,:,:]
+npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
+hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
+FIDlowpass[:,:,:,:] *= hanning_x [:,None,None,None]
+npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)
+hanning_z = np.zeros(shape=(dim[3]),dtype=np.float32)
+z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
+hanning_z [int(dim[3]/2)-npoints_z:int(dim[3]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
+FIDlowpass[:,:,:,:] *= hanning_z [None,None,None,:]  
+print('.', end='') #progress indicator
+#FFT lowpass data
+FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,3))
+FIDlowpass = FFT2D(FIDlowpass)    
+print('.', end='') #progress indicator
+#FFT actual data
+FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))
+FIDdata = FFT2D(FIDdata)    
+print('.', end='') #progress indicator
+# subtract phase difference from actual
+FIDlowpass = FIDdata/FIDlowpass # use this phase
+FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
+FIDlowpass = 0 # free memory
+#inverse FFT   
+FIDdata = iFFT2D(FIDdata)
+FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))   
+print('.', end='') #progress indicator
+
+#partial Fourrier recon
 min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
 if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual:
-    #low pass filter for phase correction (function: 1-hanning^2)
-    percentage = 10 # center only (lowpass)
-    FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
-    FIDlowpass [:,:,:,:] = FIDdata [:,:,:,:]
-    npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
-    hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
-    x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
-    hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
-    FIDlowpass[:,:,:,:] *= hanning_x [:,None,None,None]
-    npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)
-    hanning_z = np.zeros(shape=(dim[3]),dtype=np.float32)
-    z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
-    hanning_z [int(dim[3]/2)-npoints_z:int(dim[3]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
-    FIDlowpass[:,:,:,:] *= hanning_z [None,None,None,:]
-    print('.', end='') #progress indicator
-    #FFT lowpass data
-    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,3))
-    FIDlowpass = FFT2D(FIDlowpass)
-    print('.', end='') #progress indicator
-    #FFT actual data
-    FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))
-    FIDdata = FFT2D(FIDdata)
-    print('.', end='') #progress indicator
-    # subtract phase difference from actual
-    FIDlowpass = FIDdata/FIDlowpass # use this phase
-    FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
-    FIDlowpass = 0 # free memory
-    #inverse FFT
-    FIDdata = iFFT2D(FIDdata)
-    FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))    
-    print('.', end='') #progress indicator
-
     # copy complex conjugates
     percentage = 5 # mix conjugate with original
-    if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning        
+    if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning
         npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
         compl_conjugate_x = np.conj(FIDdata[dim[0]-first_x-npoints_x:dim[0],:,:,:])
         compl_conjugate_x = compl_conjugate_x[::-1,:,:,::-1] # reverse array
-        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(3)) #symetry point in dim/2
         hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
         x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
         hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
         FIDdata[1:first_x+1+npoints_x,:,:,:] *= hanning_x [:,None,None,None]
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None,None]
-        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2])
-        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2])
+        #print (FIDdata[first_x+npoints_x,dim[1]/2,dim[2]/2,dim[3]/2])
+        #print (compl_conjugate_x[compl_conjugate_x.shape[0]-1,dim[1]/2,dim[2]/2,dim[3]/2])
         FIDdata[1:first_x+1+npoints_x,:,:,:] += compl_conjugate_x[:,:,:,:]
         first_x=dim[0]-last_x
         compl_conjugate_x = 0 # free memory
-    elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end 
+    elif -1.*percentual_inc_x>min_percentual: # dimension 0 points missing at the end
         npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)       
         compl_conjugate_x = np.conj(FIDdata[1:dim[0]-last_x+npoints_x,:,:,:])
         compl_conjugate_x = compl_conjugate_x[::-1,:,:,::-1] # reverse array
-        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(2)) #symetry point in dim/2
+        compl_conjugate_x=np.roll(compl_conjugate_x, 1, axis=(3)) #symetry point in dim/2
         hanning_x = np.zeros(shape=(compl_conjugate_x.shape[0]),dtype=np.float32)
         x_ = np.linspace (1./(npoints_x-1.)*np.pi/2.,(1.-1./(npoints_x-1))*np.pi/2.,num=npoints_x)
         hanning_x [compl_conjugate_x.shape[0]-npoints_x:compl_conjugate_x.shape[0]] = np.power(np.sin(x_),2)
@@ -363,13 +368,13 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
         FIDdata[last_x+1-npoints_x:dim[0],:,:,:] *= hanning_x [:,None,None,None]
         hanning_x = 1.- hanning_x
         compl_conjugate_x *= hanning_x [:,None,None,None]
-        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2])
-        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2])
+        #print (FIDdata[last_x+1-npoints_x,dim[1]/2,dim[2]/2,dim[3]/2])
+        #print (compl_conjugate_x[0,dim[1]/2,dim[2]/2,dim[3]/2])
         FIDdata[last_x+1-npoints_x:dim[0],:,:,:] += compl_conjugate_x[:,:,:,:]       
         last_x=dim[0]-first_x
         compl_conjugate_x = 0 # free memory     
-    if percentual_inc_z>min_percentual: # dimension 2 points missing at the beginning
-        npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)  
+    if percentual_inc_z>min_percentual: # dimension 3 points missing at the beginning
+        npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)       
         compl_conjugate_z = np.conj(FIDdata[:,:,:,dim[3]-first_z-npoints_z:dim[3]])
         compl_conjugate_z = compl_conjugate_z[::-1,:,:,::-1] # reverse array
         compl_conjugate_z=np.roll(compl_conjugate_z, 1, axis=(0)) #symetry point in dim/2
@@ -379,10 +384,12 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
         FIDdata[:,:,:,1:first_z+1+npoints_z] *= hanning_z [None,None,None,:]
         hanning_z = 1.- hanning_z
         compl_conjugate_z *= hanning_z [None,None,None,:]
+        #print (FIDdata[dim[0]/2,dim[1]/2,dim[2]/2,first_z+npoints_z])
+        #print (compl_conjugate_z[dim[0]/2,dim[1]/2,dim[2]/2,compl_conjugate_z.shape[3]-1])        
         FIDdata[:,:,:,1:first_z+1+npoints_z] += compl_conjugate_z[:,:,:,:]
         first_z=dim[3]-last_z
-        compl_conjugate_z = 0 # free memory         
-    elif -1.*percentual_inc_z>min_percentual: # dimension 2 points missing at the end
+        compl_conjugate_z = 0 # free memory   
+    elif -1.*percentual_inc_z>min_percentual: # dimension 3 points missing at the end
         npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)        
         compl_conjugate_z = np.conj(FIDdata[:,:,:,1:dim[3]-last_z+npoints_z])
         compl_conjugate_z = compl_conjugate_z[::-1,:,:,::-1] # reverse array
@@ -398,7 +405,7 @@ if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual
         last_z=dim[3]-first_z 
         compl_conjugate_z = 0 # free memory
     print('.', end='') #progress indicator 
- 
+
 #Hanning filter
 percentage = 10.
 npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
@@ -598,21 +605,91 @@ image_number = 0 # 0 is B0
 mask = abs(IMGdata [:,:,:,image_number]) > threshold
 mask = median_filter  (mask, size = (3,3,1)) #median filter
  
-#transform to int
+#calc averages
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
 n_Averages = METHODdata["PVM_NAverages"]
-IMGdata_ABS = np.abs(IMGdata)/ReceiverGain/n_Averages; 
+IMGdata = IMGdata/ReceiverGain/n_Averages
+n_B0 = METHODdata["PVM_DwAoImages"]
+n_Bs=int(METHODdata["PVM_DwNDiffExpEach"])
+IMGdata_Bs = np.zeros (shape=(IMGdata.shape[0],IMGdata.shape[1],IMGdata.shape[2],n_Bs+1), dtype=np.float32)
+IMGdata_Bs[:,:,:,0] = np.abs(np.average(IMGdata[:,:,:,0:n_B0],axis=3))
+for i in range(1,bvec.shape[0]):
+  IMGdata_Bs[:,:,:,i] = np.abs(np.average(IMGdata[:,:,:,n_B0+i-1::n_Bs],axis=3))
+
+#calc ADC
+IMGdata_ADC  = -1.0*np.log(IMGdata_Bs[:,:,:,-1]/IMGdata_Bs[:,:,:,0])/bvec[-1]
+IMGdata_ADC [IMGdata_ADC<=0] = 0 # mask negative values (this happens where tmp2>tmp1, which cannot be true)
+IMGdata_ADC *= mask # mask noise
+IMGdata_ADC = median_filter (IMGdata_ADC, size = (3,3,1))
+for i in range(IMGdata_ADC.shape[2]): 
+  IMGdata_ADC[:,:,i] = gaussian_filter(IMGdata_ADC[:,:,i], sigma=0.7, truncate=3)
+#convert unit to 10^-3 mm^2/s
+IMGdata_ADC *= 1e3 
+#usual in-vivo values:
+#    white matter: 0.6-0.8
+#    grey matter: 0.8-1.0
+#    CSF: 3.0-3.5
+#    restriction (e.g. tumor, stroke) <0.7
+print('.', end='') #progress indicator
+  
+#transform to int
+max_ = np.amax(IMGdata_Bs);
+IMGdata_Bs *= 32767./max_
+IMGdata_Bs = IMGdata_Bs.astype(np.int16)
+max_ADC = np.amax(IMGdata_ADC);
+IMGdata_ADC *= 32767./max_ADC
+IMGdata_ADC = IMGdata_ADC.astype(np.int16)
+print('.', end='') #progress indicator
+
+#write 4Dfile Magnitude Averaged
+aff = np.eye(4)
+aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata_Bs.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata_Bs.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata_Bs.shape[2]/2)*aff[2,2]
+NIFTIimg_Bs = nib.Nifti1Image(IMGdata_Bs, aff)
+NIFTIimg_Bs.header['descrip'] = "B = "+bvec_str
+NIFTIimg_Bs.header.set_slope_inter(max_/32767.,0)
+NIFTIimg_Bs.header.set_xyzt_units(3, 8)
+NIFTIimg_Bs.set_sform(aff, code=0)
+NIFTIimg_Bs.set_qform(aff, code=1)
+nib.save(NIFTIimg_Bs, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_MAGNT.nii.gz'))
+print('.', end='') #progress indicator
+
+#write ADC 
+NIFTIimg_ADC = nib.Nifti1Image(IMGdata_ADC, aff)
+NIFTIimg_ADC.header.set_slope_inter(max_ADC/32767.,0)
+NIFTIimg_ADC.header.set_xyzt_units(3, 8)
+NIFTIimg_ADC.set_sform(aff, code=0)
+NIFTIimg_ADC.set_qform(aff, code=1)
+nib.save(NIFTIimg_ADC, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_ADC.nii.gz'))
+print ('\nSuccessfully written output files '+OrigFilename+'_*.nii.gz')   
+
+#end
+if sys.platform=="win32": os.system("pause") # windows
+else: 
+    #os.system('read -s -n 1 -p "Press any key to continue...\n"')
+    import termios
+    print("Press any key to continue...")
+    fd = sys.stdin.fileno()
+    oldterm = termios.tcgetattr(fd)
+    newattr = termios.tcgetattr(fd)
+    newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
+    termios.tcsetattr(fd, termios.TCSANOW, newattr)
+    try: result = sys.stdin.read(1)
+    except IOError: pass
+    finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
+
+    
+    
+    
+
+'''
+IMGdata_ABS = np.abs(IMGdata)
 max_ABS = np.amax(IMGdata_ABS);
 IMGdata_ABS *= 32767./max_ABS
 IMGdata_ABS = IMGdata_ABS.astype(np.int16)
 print('.', end='') #progress indicator
-IMGdata_PH  = np.angle(IMGdata)*mask[:,:,:,None]; # use this to mask out background noise
-max_PH = np.pi; 
-IMGdata_PH *= 32767./max_PH
-IMGdata_PH = IMGdata_PH.astype(np.int16)
-print('.', end='') #progress indicator
-
-#write 4Dfile
+#write 4Dfile Magnitude ALL
 aff = np.eye(4)
 aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
 aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
@@ -624,6 +701,25 @@ NIFTIimg_ABS.set_sform(aff, code=0)
 NIFTIimg_ABS.set_qform(aff, code=1)
 nib.save(NIFTIimg_ABS, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_ALL.nii.gz'))
 print('.', end='') #progress indicator
+
+IMGdata_PH  = np.angle(IMGdata)*mask[:,:,:,None]; # use this to mask out background noise
+max_PH = np.pi; 
+IMGdata_PH *= 32767./max_PH
+IMGdata_PH = IMGdata_PH.astype(np.int16)
+print('.', end='') #progress indicator
+#write 4Dfile Phase ALL
+aff = np.eye(4)
+aff[0,0] = SpatResol_perm[0]*1000; aff[0,3] = -(IMGdata.shape[0]/2)*aff[0,0]
+aff[1,1] = SpatResol_perm[1]*1000; aff[1,3] = -(IMGdata.shape[1]/2)*aff[1,1]
+aff[2,2] = SpatResol_perm[2]*1000; aff[2,3] = -(IMGdata.shape[2]/2)*aff[2,2]
+NIFTIimg_PH = nib.Nifti1Image(IMGdata_PH, aff)
+NIFTIimg_PH.header.set_slope_inter(max_PH/32767.,0)
+NIFTIimg_PH.header.set_xyzt_units(3, 8)
+NIFTIimg_PH.set_sform(aff, code=0)
+NIFTIimg_PH.set_qform(aff, code=1)
+nib.save(NIFTIimg_PH, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_ALL_PH.nii.gz'))
+print('.', end='') #progress indicator
+
  
 #write B0
 n_B0 = METHODdata["PVM_DwAoImages"]
@@ -675,19 +771,5 @@ NIFTIimg_ADC.set_sform(aff, code=0)
 NIFTIimg_ADC.set_qform(aff, code=1)
 nib.save(NIFTIimg_ADC, os.path.join(os.path.dirname(FIDfile),OrigFilename+'_ADC.nii.gz'))
 print ('\nSuccessfully written output files '+OrigFilename+'_*.nii.gz')   
+'''
 
-
-#end
-if sys.platform=="win32": os.system("pause") # windows
-else: 
-    #os.system('read -s -n 1 -p "Press any key to continue...\n"')
-    import termios
-    print("Press any key to continue...")
-    fd = sys.stdin.fileno()
-    oldterm = termios.tcgetattr(fd)
-    newattr = termios.tcgetattr(fd)
-    newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
-    termios.tcsetattr(fd, termios.TCSANOW, newattr)
-    try: result = sys.stdin.read(1)
-    except IOError: pass
-    finally: termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
