@@ -302,42 +302,41 @@ percentual_inc_x=float(last_x+first_x+1-dim[0])/float(last_x-first_x)*100.
 percentual_inc_z=float(last_z+first_z+1-dim[3])/float(last_z-first_z)*100.
 print('.', end='') #progress indicator
 
-# do this independently on Partial Fourrier, cause we do complex averaging
-#low pass filter for phase correction (function: 1-hanning^2)
-percentage = 10 # center only (lowpass)
-FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
-FIDlowpass [:,:,:,:] = FIDdata [:,:,:,:]
-npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
-hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
-x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
-hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
-FIDlowpass[:,:,:,:] *= hanning_x [:,None,None,None]
-npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)
-hanning_z = np.zeros(shape=(dim[3]),dtype=np.float32)
-z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
-hanning_z [int(dim[3]/2)-npoints_z:int(dim[3]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
-FIDlowpass[:,:,:,:] *= hanning_z [None,None,None,:]  
-print('.', end='') #progress indicator
-#FFT lowpass data
-FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,3))
-FIDlowpass = FFT2D(FIDlowpass)    
-print('.', end='') #progress indicator
-#FFT actual data
-FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))
-FIDdata = FFT2D(FIDdata)    
-print('.', end='') #progress indicator
-# subtract phase difference from actual
-FIDlowpass = FIDdata/FIDlowpass # use this phase
-FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
-FIDlowpass = 0 # free memory
-#inverse FFT   
-FIDdata = iFFT2D(FIDdata)
-FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))   
-print('.', end='') #progress indicator
-
 #partial Fourrier recon
 min_percentual=10. # if the potential increase in resolution is less than this % then don't even try
 if abs(percentual_inc_x)>min_percentual  or abs(percentual_inc_z)>min_percentual:
+    #low pass filter for phase correction (function: 1-hanning^2)
+    percentage = 10 # center only (lowpass)
+    FIDlowpass = np.empty(shape=FIDdata.shape,dtype=np.complex64)
+    FIDlowpass [:,:,:,:] = FIDdata [:,:,:,:]
+    npoints_x = int(float(dim[0]/zero_fill)*percentage/100.)
+    hanning_x = np.zeros(shape=(dim[0]),dtype=np.float32)
+    x_ = np.linspace (- np.pi/2.,np.pi/2.,num=2*npoints_x+1)
+    hanning_x [int(dim[0]/2)-npoints_x:int(dim[0]/2)+npoints_x+1] = 1-np.power(np.sin(x_),4)
+    FIDlowpass[:,:,:,:] *= hanning_x [:,None,None,None]
+    npoints_z = int(float(dim[3]/zero_fill)*percentage/100.)
+    hanning_z = np.zeros(shape=(dim[3]),dtype=np.float32)
+    z_ = np.linspace (-np.pi/2.,np.pi/2.,num=2*npoints_z+1)
+    hanning_z [int(dim[3]/2)-npoints_z:int(dim[3]/2)+npoints_z+1] = 1-np.power(np.sin(z_),4)
+    FIDlowpass[:,:,:,:] *= hanning_z [None,None,None,:]  
+    print('.', end='') #progress indicator
+    #FFT lowpass data
+    FIDlowpass = np.fft.fftshift(FIDlowpass, axes=(0,3))
+    FIDlowpass = FFT2D(FIDlowpass)    
+    print('.', end='') #progress indicator
+    #FFT actual data
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))
+    FIDdata = FFT2D(FIDdata)    
+    print('.', end='') #progress indicator
+    # subtract phase difference from actual
+    FIDlowpass = FIDdata/FIDlowpass # use this phase
+    FIDdata = np.abs(FIDdata) * np.exp(1j*np.angle(FIDlowpass)) #here
+    FIDlowpass = 0 # free memory
+    #inverse FFT   
+    FIDdata = iFFT2D(FIDdata)
+    FIDdata = np.fft.fftshift(FIDdata, axes=(0,3))   
+    print('.', end='') #progress indicator
+    
     # copy complex conjugates
     percentage = 5 # mix conjugate with original
     if percentual_inc_x>min_percentual: # dimension 0 points missing at the beginning
@@ -612,9 +611,12 @@ IMGdata = IMGdata/ReceiverGain/n_Averages
 n_B0 = METHODdata["PVM_DwAoImages"]
 n_Bs=int(METHODdata["PVM_DwNDiffExpEach"])
 IMGdata_Bs = np.zeros (shape=(IMGdata.shape[0],IMGdata.shape[1],IMGdata.shape[2],n_Bs+1), dtype=np.float32)
-IMGdata_Bs[:,:,:,0] = np.abs(np.average(IMGdata[:,:,:,0:n_B0],axis=3))
+IMGdata_Bs[:,:,:,0] = np.average(np.abs(IMGdata[:,:,:,0:n_B0]),axis=3) 
+#IMGdata_Bs[:,:,:,0] = np.abs(np.average(IMGdata[:,:,:,0:n_B0],axis=3)) #not a good idea for IVIM fitting
 for i in range(1,bvec.shape[0]):
-  IMGdata_Bs[:,:,:,i] = np.abs(np.average(IMGdata[:,:,:,n_B0+i-1::n_Bs],axis=3))
+  IMGdata_Bs[:,:,:,i] = np.average(np.abs(IMGdata[:,:,:,n_B0+i-1::n_Bs]),axis=3) 
+  #IMGdata_Bs[:,:,:,i] = np.abs(np.average(IMGdata[:,:,:,n_B0+i-1::n_Bs],axis=3)) #not a good idea for IVIM fitting
+  #the threshold algorithm supposedly gets convused by non-white noise  
 
 #calc ADC
 IMGdata_ADC  = -1.0*np.log(IMGdata_Bs[:,:,:,-1]/IMGdata_Bs[:,:,:,0])/bvec[-1]
