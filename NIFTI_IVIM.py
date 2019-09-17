@@ -1,7 +1,7 @@
 #
 # calculates IVIM parameters
-#  slow diffusion time constant (aka ADC)
-#  fast diffusion time constant 
+#  slow diffusion coefficient (aka ADC)
+#  fast diffusion coefficient 
 #  perfusion fraction
 #      
 #
@@ -36,13 +36,10 @@
 #    - nibabel
 #
 # to do
-# - calculate individual threshold for each image type B(B0, Bs)
-# - calc kernel for result filtering based on resolution, to work for 2D and 3D
-# - test interpolation 2x
-# - only enter curvefit if not all points are zero
-# - parallelize
 # - use current parameter maps as initial condition for true bi-exponential fit
-# - bayasian fit (?)
+# - parallelize
+# - test interpolation 2x
+# - bayesian fit (?)
 
 
 
@@ -52,6 +49,7 @@ except: pass #silent
 from math import ceil, floor
 import sys
 import os
+import fnmatch
 import warnings
 import numpy as np
 import nibabel as nib
@@ -93,26 +91,48 @@ def ParseSingleValue(val):
             result = val.rstrip('\n')
     return result  
 
-#define fit functions
+#define monoexponential fit function
 def expdecay(x,a,D):
-    return a* np.exp(-x*D)
+    if a<=0 and D<=0: result = 0
+    else: result = a*np.exp(-x*D)
+    return result
 def FIT (x,y): 
     bad_fit=False
     initial_conditions=[max(y), 1/((max(x)+min(x))/2)]
-    try: 
-        pars,covar = curve_fit(expdecay,x,y,p0=initial_conditions,maxfev=100*(len(x)+1))
-        if (np.size(pars)==1):  bad_fit=True
-        if (np.size(covar)==1): bad_fit=True
+    try: pars,covar = curve_fit(expdecay,x,y,p0=initial_conditions)
+    except RuntimeError: bad_fit=True    
+    if bad_fit: A=0;D=0        #fit failed
+    else: A=pars[0]; D=pars[1] #fit OK
+    return A, D
+    
+#define biexponential fit function
+def IVIM(x,a,f,dfast,dslow):
+    if a<=0 or dslow<=0: result=0
+    elif f<=0 or dfast<=0: result=a*exp(-x*dslow)
+    else: a*((1-f)*exp(-x*dslow) + f*exp(-x*(dslow+dfast))) 
+    return result
+#work to be done here
+'''
+def FIT_IVIM (x,y,f_ini,dfast_ini,dslow_ini):
+    initial_conditions_IVIM=[max(y), f_ini, dfast_ini, dslow_ini]
+    f=0; dfast=0; dslow=0
+    bad_fit=False
+    try: pars,covar = curve_fit(IVIM,x,y,p0=initial_conditions_IVIM)
     except RuntimeError: bad_fit=True
-    if bad_fit: A=0;Aerr=0;D=0;Derr=0                           #fit failed
-    elif (pars[0]<0) or (pars[1]<0): A=0;Aerr=0;D=0;Derr=0      #does not make sense
-    elif  covar[1,1]>0.5*pars[1]: A=0;Aerr=0;D=0;Derr=0         #error too large    
-    #elif  covar[0,0]>50*pars[0]: A=0;Aerr=0;D=0;Derr=0          #error too large        
-    else: A=pars[0]; Aerr=covar[0,0];D=pars[1]; Derr=covar[1,1] #fit OK
-    return A, Aerr, D, Derr
-
-
-
+    if not bad_fit:
+        if pars[1]>0: f=pars[1]                           
+        if pars[2]>0: dfast=pars[2]
+        if pars[3]>0: dslow=pars[3]
+        if dfast>Dfast_clip: dfast=Dfast_clip
+        if dslow>Dslow_clip: dslow=Dslow_clip
+    #fallback
+    if f==0 or f>2*f_ini or dfast==0 or dslow<0.0005:
+        if f>2*f_ini: f=f_ini  # this condition removes some high intensity overflow in the perfusion fraction map
+        if f==0: f=f_ini
+        if dfast==0: dfast=dfast_ini
+        if dslow<0.0005: dslow=dslow_ini # this condition removes some black holes in the ADC map       
+    return f,dfast,dslow 
+'''
     
 #general initialization stuff  
 Program_name = os.path.basename(sys.argv[0]); 
@@ -158,34 +178,46 @@ xyzt_units1  = img.header.get_xyzt_units()[0]
 xyzt_units2  = img.header.get_xyzt_units()[1]
 sform = int(img.header['sform_code'])
 qform = int(img.header['qform_code'])
-bvec_str = str(img.header['descrip']).replace("b'","").replace("'","")
-if bvec_str[0:4] != "B = ":
-   print ("ERROR: unable to identify B values from NIFTI header"); sys.exit(1)
-bvec_str = bvec_str[4:].split(',')
-bvec = np.zeros (len(bvec_str), dtype=np.int)
-for i in range (len(bvec_str)):
-   try: bvec[i] = float(bvec_str[i])
+bval_str = str(img.header['descrip']).replace("b'","").replace("'","")
+if bval_str[0:4] != "B = ":
+   print ("Unable to identify B values from NIFTI header")
+   # alternatively try to find bval file
+   bval_filename = ""
+   for root, dirs, files in os.walk(dirname):
+      for name in files:
+         if fnmatch.fnmatch(name, basename+"*.bval") and root==dirname: 
+            bval_filename=name
+   if bval_filename!="": #found
+      print ("Reading B's from file",bval_filename)
+      with open(os.path.join(dirname,bval_filename), "r") as f:
+         line = f.readline() #read just one line
+         bval_str = "B = "+line.replace(" ",",")         
+   else: # not found, nothing else to do, sorry
+      print ("ERROR: unable to identify B values, no suitable .bval file found"); sys.exit(1)
+bval_str = bval_str[4:].split(',')
+bval = np.zeros (len(bval_str), dtype=np.int)
+for i in range (len(bval_str)):
+   try: bval[i] = float(bval_str[i])
    except: print ("ERROR: unable to parse B-values in NIFTY header"); sys.exit(1)
-bvec_str = np.array2string(bvec,max_line_width=1000)
-bvec_str = bvec_str.replace('.]','').replace(']','').replace('[','')
-bvec_str = bvec_str.replace('. ',' ').replace('   ',' ').replace('  ',' ')
-print ("B's ="+bvec_str); sys.stdout.flush()
-
+bval_str = np.array2string(bval,max_line_width=1000)
+bval_str = bval_str.replace('.]','').replace(']','').replace('[','')
+bval_str = bval_str.replace('. ',' ').replace('   ',' ').replace('  ',' ')
 
 #check some stuff
 if len(IMGdata.shape) != 4:
     print ('ERROR: 4D NIFTI expected, 3D NIFTI found, this is probably not an IVIM file'); 
     sys.exit(1)
-if bvec.shape[0]!=IMGdata.shape[3]:
+if bval.shape[0]!=IMGdata.shape[3]:
     print ("ERROR: number of B's in header unequal data dimension "); 
     sys.exit(1)
-if np.unique(bvec).shape[0]<3:
-    print ("ERROR: need at least 3 unique B's"); 
+if np.unique(bval).shape[0]<7:
+    print ("ERROR: need at least 7 unique B's"); 
     sys.exit(1)
 if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
     print ("ERROR: this looks like a Phase Image"); 
     sys.exit(1)
     
+''' not compatible with patient data    
 # check if already masked
 N=10 # use 10% at the corners of the FOV
 tresh=np.empty(shape=8,dtype=np.float)
@@ -198,6 +230,12 @@ arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 if np.count_nonzero(arr==0)>0.2*arr.size: #masked input image not OK
     print ("ERROR: this looks like an image with noise mask"); 
     sys.exit(1)    
+'''
+#sort in ascending b-value order (just in case)
+order = np.argsort (bval)
+bval = bval[order]
+IMGdata = IMGdata [:,:,:,order]
+print ("B's ="+bval_str); sys.stdout.flush()
 
     
 # --------------------------- start doing something --------------------------
@@ -217,144 +255,162 @@ IMGdata = zoomed
 # calculate mask
 # use noise in all 8 corners to establish threshold
 N=10 # use 10% at the corners of the FOV
-std_factor = 4 # thresh = avg + std_factor*std
-thresh=np.empty(shape=8,dtype=np.float)
-avg=np.empty(shape=8,dtype=np.float)
-std=np.empty(shape=8,dtype=np.float)
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[0]=np.mean(arr)
-std[0]=np.std(arr)
-thresh[0]=avg[0] + std_factor*std[0]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[1]=np.mean(arr)
-std[1]=np.std(arr)
-thresh[1]=avg[1] + std_factor*std[1]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[2]=np.mean(arr)
-std[2]=np.std(arr)
-thresh[2]=avg[2] + std_factor*std[2]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[3]=np.mean(arr)
-std[3]=np.std(arr)
-thresh[3]=avg[3] + std_factor*std[3]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[4]=np.mean(arr)
-std[4]=np.std(arr)
-thresh[4]=avg[4] + std_factor*std[4]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=0; yend=int(IMGdata.shape[1]/N)
-zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend])
-avg[5]=np.mean(arr)
-std[5]=np.std(arr)
-thresh[5]=avg[5] + std_factor*std[5]
-xstart=0; xend=int(IMGdata.shape[0]/N)
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[6]=np.mean(arr)
-std[6]=np.std(arr)
-thresh[6]=avg[6] + std_factor*std[6]
-xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
-ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
-zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
-arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
-avg[7]=np.mean(arr)
-std[7]=np.std(arr)
-thresh[7]=avg[7] + std_factor*std[7]
-mask_threshold=np.min(thresh)
-mask =  IMGdata [:,:,:,:] > mask_threshold
+std_factor = 2 # thresh = avg + std_factor*std
+mask = np.zeros(shape=IMGdata.shape,dtype=np.float)
+mask_all = np.zeros(shape=IMGdata.shape[0:3],dtype=np.int16)
+mask_threshold=np.zeros(shape=IMGdata.shape[3],dtype=np.float)
+for i in range (IMGdata.shape[3]):
+    thresh=np.empty(shape=8,dtype=np.float)
+    avg=np.empty(shape=8,dtype=np.float)
+    std=np.empty(shape=8,dtype=np.float)
+    xstart=0; xend=int(IMGdata.shape[0]/N)
+    ystart=0; yend=int(IMGdata.shape[1]/N)
+    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[0]=np.mean(arr)
+    std[0]=np.std(arr)
+    thresh[0]=avg[0] + std_factor*std[0]
+    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+    ystart=0; yend=int(IMGdata.shape[1]/N)
+    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[1]=np.mean(arr)
+    std[1]=np.std(arr)
+    thresh[1]=avg[1] + std_factor*std[1]
+    xstart=0; xend=int(IMGdata.shape[0]/N)
+    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[2]=np.mean(arr)
+    std[2]=np.std(arr)
+    thresh[2]=avg[2] + std_factor*std[2]
+    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+    zstart=0; zend=int(ceil(float(IMGdata.shape[2])/float(N)))
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[3]=np.mean(arr)
+    std[3]=np.std(arr)
+    thresh[3]=avg[3] + std_factor*std[3]
+    xstart=0; xend=int(IMGdata.shape[0]/N)
+    ystart=0; yend=int(IMGdata.shape[1]/N)
+    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[4]=np.mean(arr)
+    std[4]=np.std(arr)
+    thresh[4]=avg[4] + std_factor*std[4]
+    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+    ystart=0; yend=int(IMGdata.shape[1]/N)
+    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[5]=np.mean(arr)
+    std[5]=np.std(arr)
+    thresh[5]=avg[5] + std_factor*std[5]
+    xstart=0; xend=int(IMGdata.shape[0]/N)
+    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[6]=np.mean(arr)
+    std[6]=np.std(arr)
+    thresh[6]=avg[6] + std_factor*std[6]
+    xstart=int(IMGdata.shape[0]-IMGdata.shape[0]/N); xend=IMGdata.shape[0]
+    ystart=int(IMGdata.shape[1]-IMGdata.shape[1]/N); yend=IMGdata.shape[1]
+    zstart=int(floor(float(IMGdata.shape[2])-float(IMGdata.shape[2])/float(N))); zend=IMGdata.shape[2]
+    arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,i])
+    avg[7]=np.mean(arr)
+    std[7]=np.std(arr)
+    thresh[7]=avg[7] + std_factor*std[7]
+    mask_threshold[i]=np.min(thresh)
+    mask[:,:,:,i] = IMGdata [:,:,:,i] > mask_threshold[i]
+    IMGdata [:,:,:,i] *= mask[:,:,:,i] # apply mask    
 print ('.',end=''); sys.stdout.flush()
-#filter mask
-mask = median_filter (mask, size = (3,3,1,1)) #filter in 2D spatial dimension
-mask = mask > 0.8  # takes out the 0.5 case of the median filter
-print ('.',end=''); sys.stdout.flush()
-#appy mask
-IMGdata = IMGdata*mask
-print ('.',end=''); sys.stdout.flush()
+mask_all = np.sum(mask, axis=3)
+mask_all = mask_all>=2 # need at leas 2 good points
+mask_all = mask_all.astype(np.int16)
 
 # reshape flatten
 dim = IMGdata.shape
-IMGdata = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
+IMGdata  = np.reshape(IMGdata, (dim[0]*dim[1]*dim[2],dim[3]))
+mask_all = np.reshape(mask_all,(dim[0]*dim[1]*dim[2]))
 print ('.',end=''); sys.stdout.flush()
+
+# vector reduction
+temp_IMGdata = IMGdata [mask_all>0,:]
 
 #fit slow diffusion component (aka ADC)
 print ('\nFitting slow diffusion component'); sys.stdout.flush()
-min_b_index = int(ceil(2./3.*bvec.shape[0]))                # use only high b-values
-if min_b_index>bvec.shape[0]-4: min_b_index=bvec.shape[0]-4 # at least 4
-Dslow_clip = 1./(bvec[min_b_index]*5.)
+min_b_index = int(ceil(2./3.*bval.shape[0]))                # use only high b-values
+if min_b_index>bval.shape[0]-4: min_b_index=bval.shape[0]-4 # at least 4
+Dslow_clip = 1./(bval[min_b_index]*5.)
 if Dslow_clip<3e-3: Dslow_clip=3e-3   # water is ~2e-3 (50% safety margin) 
-print ("Using B's",str(bvec[min_b_index:]).replace('[','').replace(']',''))
+print ("Using B's",str(bval[min_b_index:]).replace('[','').replace(']',''))
 print ("Dslow clip is",Dslow_clip*1e3)
-data_Dslow = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
-data_Aslow = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
-progress_tag = int(dim[0]*dim[1]*dim[2]/70)
-for i in range(dim[0]*dim[1]*dim[2]):
+temp_Dslow = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+temp_Aslow = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+progress_tag = int(temp_IMGdata.shape[0]/70)
+for i in range(temp_IMGdata.shape[0]):
    if i%progress_tag==0: print ('.',end=''); sys.stdout.flush()
-   nz = np.nonzero (IMGdata [i,min_b_index:])     
-   if nz[0].shape[0]>=3: #need at least 3 unmasked points
-      B_temp = bvec[min_b_index:][nz]
-      IMGdata_temp = IMGdata [i,min_b_index:][nz]    
-      data_Aslow[i], Aerr, data_Dslow [i], ADCerr = FIT (B_temp, IMGdata_temp)
+   nz = np.nonzero (temp_IMGdata [i,min_b_index:])     
+   if nz[0].shape[0]>=2: #permit down to minimum of 2 unmasked points 
+      B_nz = bval[min_b_index:][nz]
+      IMGdata_nz = temp_IMGdata [i,min_b_index:][nz]          
+      temp_Aslow[i], temp_Dslow [i] = FIT (B_nz, IMGdata_nz)
 print (''); sys.stdout.flush()
+temp_Aslow[temp_Aslow<0]=0
+temp_Dslow[temp_Dslow<0]=0
 
 #subtract long component
-for i in range(dim[0]*dim[1]*dim[2]):
-    IMGdata [i,:] -= expdecay(bvec,data_Aslow[i],data_Dslow [i])
-#reapply threshold 
-#CAUTION: this also remove negative points
-# if the fitting of th slow compontent overestimates the amplitude
-# and/or underestimates the diffusion coefficient this will remove points
-# that could potientially be still meaningfull when fitted
-# with "exp(-x*D)-offset" (we currently don't use an offset)
-IMGdata[IMGdata<mask_threshold]=0 
+IMGdata_residual = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)
+for j in range(temp_IMGdata.shape[0]):
+    IMGdata_residual[j,:] = temp_IMGdata[j,:] - expdecay(bval,temp_Aslow[j],temp_Dslow [j])
+for i in range(temp_IMGdata.shape[1]):   
+    #reapply threshold 
+    #CAUTION: this also remove negative points
+    # if the fitting of th slow compontent overestimates the amplitude
+    # and/or underestimates the diffusion coefficient this will remove points
+    # that could potientially be still meaningfull when fitted
+    # with "exp(-x*D)-offset" (we currently don't use an offset)
+    IMGdata_residual[:,i][IMGdata_residual[:,i]<mask_threshold[i]] = 0 
 
 #fit fast diffusion component
 print ('Fitting fast diffusion component'); sys.stdout.flush()
-max_b_index = int(floor(2./3.*bvec.shape[0]))           # use only low b-values
+max_b_index = int(floor(2./3.*bval.shape[0]))           # use only low b-values
 if max_b_index<3: max_b_index=3                         # at least 4 (first index is 0)
-if max_b_index>=bvec.shape[0]: max_b_index=bvec.shape[0]-1 # all
-Dfast_thresh = 1./(bvec[max_b_index-1]*2.)
+if max_b_index>=bval.shape[0]: max_b_index=bval.shape[0]-1 # all
+Dfast_thresh = 1./(bval[max_b_index-1]*2.)
 if Dfast_thresh<3e-3: Dfast_thresh=3e-3   # water is ~2e-3 (50% safety margin)
-print ("Using B's",str(bvec[0:max_b_index]).replace('[','').replace(']',''))
+print ("Using B's",str(bval[0:max_b_index]).replace('[','').replace(']',''))
 print ("Dfast threshold is",Dfast_thresh*1e3)
-data_Dfast = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
-data_Afast = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
-progress_tag = int(dim[0]*dim[1]*dim[2]/70)
-for i in range(dim[0]*dim[1]*dim[2]):
+temp_Dfast = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+temp_Afast = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+progress_tag = int(IMGdata_residual.shape[0]/70)
+for i in range(IMGdata_residual.shape[0]):
    if i%progress_tag==0: print ('.',end=''); sys.stdout.flush()
-   nz = np.nonzero (IMGdata [i,0:max_b_index])     
-   if nz[0].shape[0]>=3: #need at least 3 unmasked points
-      B_temp = bvec[0:max_b_index][nz]
-      IMGdata_temp = IMGdata [i,0:max_b_index][nz]    
-      data_Afast[i], Arr, data_Dfast [i], Derr = FIT (B_temp, IMGdata_temp)
+   nz = np.nonzero (IMGdata_residual [i,0:max_b_index])     
+   if nz[0].shape[0]>=4: #need at least 4 unmasked points
+      B_nz = bval[0:max_b_index][nz]
+      IMGdata_nz = IMGdata_residual [i,0:max_b_index][nz]    
+      temp_Afast[i], temp_Dfast [i] = FIT (B_nz, IMGdata_nz)
 print (''); sys.stdout.flush()
+temp_Afast[temp_Afast<0]=0
+temp_Dfast[temp_Dfast<0]=0
 
 #calculate Perfusion Fraction
-data_Pfrac = np.zeros(dtype=np.float32, shape=(dim[0]*dim[1]*dim[2]))
-nz = np.nonzero (data_Afast+data_Aslow)
-data_Pfrac[nz] = data_Afast[nz]/(data_Afast[nz]+data_Aslow[nz])*100.
+temp_Pfrac = np.zeros(dtype=np.float32, shape=temp_IMGdata.shape[0])
+nz = np.nonzero (temp_Afast+temp_Aslow)
+temp_Pfrac[nz] = temp_Afast[nz]/(temp_Afast[nz]+temp_Aslow[nz])*100.
+
+#undo vector reduction
+data_Dslow = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
+data_Dfast = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32) 
+data_Pfrac = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)      
+data_Dslow[mask_all>0] = temp_Dslow[:] # undo vector reduction 
+data_Dfast[mask_all>0] = temp_Dfast[:] # undo vector reduction
+data_Pfrac[mask_all>0] = temp_Pfrac[:] # undo vector reduction     
 
 #reshape to original
 data_Dslow = np.reshape(data_Dslow,(dim[0],dim[1],dim[2]))
 data_Dfast = np.reshape(data_Dfast,(dim[0],dim[1],dim[2]))
 data_Pfrac = np.reshape(data_Pfrac,(dim[0],dim[1],dim[2]))
-IMGdata    = np.reshape(IMGdata,   (dim[0],dim[1],dim[2],dim[3]))
 
 #clip slow (aka ADC)
 data_Dslow[data_Dslow>Dslow_clip]=Dslow_clip
@@ -363,32 +419,33 @@ data_Dslow[data_Dslow>Dslow_clip]=Dslow_clip
 data_Dfast[data_Dfast<Dfast_thresh]=0
 data_Pfrac[data_Dfast<Dfast_thresh]=0
 
-#filter slow
-data_Dslow = median_filter (data_Dslow, size = (3,3,1))
-for i in range(data_Dslow.shape[2]): 
-  data_Dslow[:,:,i] = gaussian_filter(data_Dslow[:,:,i], sigma=0.7, truncate=3)
-#filter fast
-data_Dfast = median_filter (data_Dfast, size = (3,3,1))
-for i in range(data_Dfast.shape[2]): 
-  data_Dfast[:,:,i] = gaussian_filter(data_Dfast[:,:,i], sigma=0.7, truncate=3)
-#filter Perfusion Fraction
-data_Pfrac = median_filter (data_Pfrac, size = (3,3,1))
-for i in range(data_Pfrac.shape[2]): 
-  data_Pfrac[:,:,i] = gaussian_filter(data_Pfrac[:,:,i], sigma=0.7, truncate=3)  
+#calculate kernel that serves both 2D and 3D acquisitions
+second=np.sort(SpatResol[0:3])[1]; #2nd smalest spatial res 
+kernel = np.round(float(second)/SpatResol[0:3],0).astype(np.int) # 2nd smalest element is index 1
+kernel_sizes=np.asarray([1,3,5,7])
+sigmas = np.round(kernel_sizes/3.*0.7,1); sigmas[kernel_sizes==1]=0
+kernel[kernel>len(kernel_sizes)-1]=len(kernel_sizes)-1 # limit to index size
+sigma_=np.zeros(shape=kernel.shape, dtype=np.float32)
+sigma_[0] = sigmas [kernel[0]] # translate index
+sigma_[1] = sigmas [kernel[1]] # translate index
+sigma_[2] = sigmas [kernel[2]] # translate index
+kernel[0] = kernel_sizes[kernel[0]] # translate index
+kernel[1] = kernel_sizes[kernel[1]] # translate index
+kernel[2] = kernel_sizes[kernel[2]] # translate index
 
-'''
-#filter slow
-data_Dslow = median_filter (data_Dslow, size = (5,5,1))
-for i in range(data_Dslow.shape[2]): 
-  data_Dslow[:,:,i] = gaussian_filter(data_Dslow[:,:,i], sigma=1.2, truncate=3)
-#filter fast
-data_Dfast = median_filter (data_Dfast, size = (5,5,1))
-for i in range(data_Dfast.shape[2]): 
-  data_Dfast[:,:,i] = gaussian_filter(data_Dfast[:,:,i], sigma=1.2, truncate=3)
-#filter Perfusion Fraction
-data_Pfrac = median_filter (data_Pfrac, size = (5,5,1))
-for i in range(data_Pfrac.shape[2]): 
-  data_Pfrac[:,:,i] = gaussian_filter(data_Pfrac[:,:,i], sigma=1.2, truncate=3)  
+#median filter 
+print ("Median filter results with kernel",str(kernel).replace("[","").replace("]",""))
+data_Dslow = median_filter (data_Dslow, size=kernel)
+data_Dfast = median_filter (data_Dfast, size=kernel)
+data_Pfrac = median_filter (data_Pfrac, size=kernel)
+
+#gaussian filter
+print ("Gauss  filter results with sigma ",str(sigma_).replace("[","").replace("]","").replace("0. ","0"))
+data_Dslow = gaussian_filter(data_Dslow, sigma=sigma_, truncate=3)
+data_Dfast = gaussian_filter(data_Dfast, sigma=sigma_, truncate=3)
+data_Pfrac = gaussian_filter(data_Pfrac, sigma=sigma_, truncate=3)
+
+''' 
 #decrease resolution
 print ('Decrease resolution 2x'); sys.stdout.flush()
 data_Dslow  = zoom(data_Dslow,[0.5,0.5,1],order=1)
@@ -449,18 +506,6 @@ Pfrac_img.set_qform(affine, qform)
 try: 
    nib.save(Pfrac_img, os.path.join(dirname,basename+'_Pfrac.nii.gz'))
 except: print ('ERROR:  problem while writing results'); exit(1)
-
-'''
-#Write Residual after subtraction of long diffusion component
-Residual_img = nib.Nifti1Image(IMGdata, affine)
-Residual_img.header.set_slope_inter(max_Residual/32767.,0)
-Residual_img.header.set_xyzt_units(xyzt_units1,xyzt_units2)
-Residual_img.set_sform(affine, sform)
-Residual_img.set_qform(affine, qform)
-try: 
-   nib.save(Residual_img, os.path.join(dirname,basename+'_Residual.nii.gz'))
-except: print ('ERROR:  problem while writing results'); exit(1)
-'''
 
 print ('Successfully written output files'); sys.stdout.flush()
 
