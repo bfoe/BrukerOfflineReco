@@ -35,12 +35,6 @@
 #    - scipy
 #    - nibabel
 #
-# to do
-# - use current parameter maps as initial condition for true bi-exponential fit
-# - parallelize
-# - test interpolation 2x
-# - bayesian fit (?)
-
 
 
 from __future__ import print_function
@@ -91,48 +85,18 @@ def ParseSingleValue(val):
             result = val.rstrip('\n')
     return result  
 
-#define monoexponential fit function
+#define mono-exponential fit function
 def expdecay(x,a,D):
-    if a<=0 and D<=0: result = 0
+    if a<=0 or D<=0: result = 0
     else: result = a*np.exp(-x*D)
     return result
-def FIT (x,y): 
+def FIT (x,y,initial_conditions): 
     bad_fit=False
-    initial_conditions=[max(y), 1/((max(x)+min(x))/2)]
     try: pars,covar = curve_fit(expdecay,x,y,p0=initial_conditions)
     except RuntimeError: bad_fit=True    
-    if bad_fit: A=0;D=0        #fit failed
-    else: A=pars[0]; D=pars[1] #fit OK
+    if bad_fit: A=0;D=0       #fit failed
+    else: A=pars[0];D=pars[1] #fit OK
     return A, D
-    
-#define biexponential fit function
-def IVIM(x,a,f,dfast,dslow):
-    if a<=0 or dslow<=0: result=0
-    elif f<=0 or dfast<=0: result=a*exp(-x*dslow)
-    else: a*((1-f)*exp(-x*dslow) + f*exp(-x*(dslow+dfast))) 
-    return result
-#work to be done here
-'''
-def FIT_IVIM (x,y,f_ini,dfast_ini,dslow_ini):
-    initial_conditions_IVIM=[max(y), f_ini, dfast_ini, dslow_ini]
-    f=0; dfast=0; dslow=0
-    bad_fit=False
-    try: pars,covar = curve_fit(IVIM,x,y,p0=initial_conditions_IVIM)
-    except RuntimeError: bad_fit=True
-    if not bad_fit:
-        if pars[1]>0: f=pars[1]                           
-        if pars[2]>0: dfast=pars[2]
-        if pars[3]>0: dslow=pars[3]
-        if dfast>Dfast_clip: dfast=Dfast_clip
-        if dslow>Dslow_clip: dslow=Dslow_clip
-    #fallback
-    if f==0 or f>2*f_ini or dfast==0 or dslow<0.0005:
-        if f>2*f_ini: f=f_ini  # this condition removes some high intensity overflow in the perfusion fraction map
-        if f==0: f=f_ini
-        if dfast==0: dfast=dfast_ini
-        if dslow<0.0005: dslow=dslow_ini # this condition removes some black holes in the ADC map       
-    return f,dfast,dslow 
-'''
     
 #general initialization stuff  
 Program_name = os.path.basename(sys.argv[0]); 
@@ -195,11 +159,11 @@ if bval_str[0:4] != "B = ":
    else: # not found, nothing else to do, sorry
       print ("ERROR: unable to identify B values, no suitable .bval file found"); sys.exit(1)
 bval_str = bval_str[4:].split(',')
-bval = np.zeros (len(bval_str), dtype=np.int)
+bval = np.zeros (len(bval_str), dtype=np.float32)
 for i in range (len(bval_str)):
    try: bval[i] = float(bval_str[i])
    except: print ("ERROR: unable to parse B-values in NIFTY header"); sys.exit(1)
-bval_str = np.array2string(bval,max_line_width=1000)
+bval_str = np.array2string(bval.astype(np.int16),max_line_width=1000)
 bval_str = bval_str.replace('.]','').replace(']','').replace('[','')
 bval_str = bval_str.replace('. ',' ').replace('   ',' ').replace('  ',' ')
 
@@ -216,8 +180,7 @@ if np.unique(bval).shape[0]<7:
 if np.amin(IMGdata)<0 or abs(np.amax(IMGdata)-np.pi)<0.2:
     print ("ERROR: this looks like a Phase Image"); 
     sys.exit(1)
-    
-''' not compatible with patient data    
+       
 # check if already masked
 N=10 # use 10% at the corners of the FOV
 tresh=np.empty(shape=8,dtype=np.float)
@@ -230,27 +193,16 @@ arr=np.abs(IMGdata[xstart:xend,ystart:yend,zstart:zend,:])
 if np.count_nonzero(arr==0)>0.2*arr.size: #masked input image not OK
     print ("ERROR: this looks like an image with noise mask"); 
     sys.exit(1)    
-'''
+
 #sort in ascending b-value order (just in case)
 order = np.argsort (bval)
 bval = bval[order]
 IMGdata = IMGdata [:,:,:,order]
 print ("B's ="+bval_str); sys.stdout.flush()
 
-    
-# --------------------------- start doing something --------------------------
 
-'''
-#Increase resolution
-print ('\nIncrease resolution 2x'); sys.stdout.flush()
-dim = IMGdata.shape
-zoomed = np.zeros((IMGdata.shape[0]*2,IMGdata.shape[1]*2,IMGdata.shape[2],IMGdata.shape[3]),dtype=np.float32) 
-for i in range(IMGdata.shape[3]):
-   print ('.',end=''); sys.stdout.flush() #progress indicator
-   zoomed[:,:,:,i] = zoom(IMGdata[:,:,:,i],[2,2,1],order=2)
-zoomed[zoomed<0]=0 #remove negative values
-IMGdata = zoomed
-'''
+
+# --------------------------- start doing something --------------------------
 
 # calculate mask
 # use noise in all 8 corners to establish threshold
@@ -342,21 +294,21 @@ min_b_index = int(ceil(2./3.*bval.shape[0]))                # use only high b-va
 if min_b_index>bval.shape[0]-4: min_b_index=bval.shape[0]-4 # at least 4
 Dslow_clip = 1./(bval[min_b_index]*5.)
 if Dslow_clip<3e-3: Dslow_clip=3e-3   # water is ~2e-3 (50% safety margin) 
-print ("Using B's",str(bval[min_b_index:]).replace('[','').replace(']',''))
+print ("Using B's",str(bval[min_b_index:].astype(np.int16))\
+       .replace('[','').replace(']','').replace('   ',' ').replace('  ',' '))
 print ("Dslow clip is",Dslow_clip*1e3)
-temp_Dslow = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
 temp_Aslow = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+temp_Dslow = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
 progress_tag = int(temp_IMGdata.shape[0]/70)
 for i in range(temp_IMGdata.shape[0]):
    if i%progress_tag==0: print ('.',end=''); sys.stdout.flush()
    nz = np.nonzero (temp_IMGdata [i,min_b_index:])     
-   if nz[0].shape[0]>=2: #permit down to minimum of 2 unmasked points 
+   if nz[0].shape[0]>=3: #permit down to minimum of 3 unmasked points 
       B_nz = bval[min_b_index:][nz]
-      IMGdata_nz = temp_IMGdata [i,min_b_index:][nz]          
-      temp_Aslow[i], temp_Dslow [i] = FIT (B_nz, IMGdata_nz)
-print (''); sys.stdout.flush()
-temp_Aslow[temp_Aslow<0]=0
-temp_Dslow[temp_Dslow<0]=0
+      IMGdata_nz = temp_IMGdata [i,min_b_index:][nz] 
+      initial_conditions=[max(IMGdata_nz), 1./bval[-1]]
+      temp_Aslow[i], temp_Dslow [i] = FIT (B_nz, IMGdata_nz, initial_conditions)
+print (''); sys.stdout.flush() 
 
 #subtract long component
 IMGdata_residual = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)
@@ -376,23 +328,23 @@ print ('Fitting fast diffusion component'); sys.stdout.flush()
 max_b_index = int(floor(2./3.*bval.shape[0]))           # use only low b-values
 if max_b_index<3: max_b_index=3                         # at least 4 (first index is 0)
 if max_b_index>=bval.shape[0]: max_b_index=bval.shape[0]-1 # all
-Dfast_thresh = 1./(bval[max_b_index-1]*2.)
+Dfast_thresh = 1./(bval[max_b_index-1]*1.)
 if Dfast_thresh<3e-3: Dfast_thresh=3e-3   # water is ~2e-3 (50% safety margin)
-print ("Using B's",str(bval[0:max_b_index]).replace('[','').replace(']',''))
+print ("Using B's",str(bval[0:max_b_index].astype(np.int16))\
+       .replace('[','').replace(']','').replace('   ',' ').replace('  ',' '))
 print ("Dfast threshold is",Dfast_thresh*1e3)
-temp_Dfast = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
 temp_Afast = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
+temp_Dfast = np.zeros(shape=temp_IMGdata.shape[0], dtype=np.float32)
 progress_tag = int(IMGdata_residual.shape[0]/70)
 for i in range(IMGdata_residual.shape[0]):
    if i%progress_tag==0: print ('.',end=''); sys.stdout.flush()
    nz = np.nonzero (IMGdata_residual [i,0:max_b_index])     
    if nz[0].shape[0]>=4: #need at least 4 unmasked points
       B_nz = bval[0:max_b_index][nz]
-      IMGdata_nz = IMGdata_residual [i,0:max_b_index][nz]    
-      temp_Afast[i], temp_Dfast [i] = FIT (B_nz, IMGdata_nz)
+      IMGdata_nz = IMGdata_residual [i,0:max_b_index][nz] 
+      initial_conditions=[max(IMGdata_nz), 1./bval[1]]      
+      temp_Afast[i], temp_Dfast [i] = FIT (B_nz, IMGdata_nz, initial_conditions)
 print (''); sys.stdout.flush()
-temp_Afast[temp_Afast<0]=0
-temp_Dfast[temp_Dfast<0]=0
 
 #calculate Perfusion Fraction
 temp_Pfrac = np.zeros(dtype=np.float32, shape=temp_IMGdata.shape[0])
@@ -401,23 +353,23 @@ temp_Pfrac[nz] = temp_Afast[nz]/(temp_Afast[nz]+temp_Aslow[nz])*100.
 
 #undo vector reduction
 data_Dslow = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
-data_Dfast = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32) 
-data_Pfrac = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)      
+data_Dfast = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
+data_Pfrac = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
 data_Dslow[mask_all>0] = temp_Dslow[:] # undo vector reduction 
 data_Dfast[mask_all>0] = temp_Dfast[:] # undo vector reduction
 data_Pfrac[mask_all>0] = temp_Pfrac[:] # undo vector reduction     
 
 #reshape to original
-data_Dslow = np.reshape(data_Dslow,(dim[0],dim[1],dim[2]))
-data_Dfast = np.reshape(data_Dfast,(dim[0],dim[1],dim[2]))
-data_Pfrac = np.reshape(data_Pfrac,(dim[0],dim[1],dim[2]))
+data_Dslow  = np.reshape(data_Dslow, (dim[0],dim[1],dim[2]))
+data_Dfast  = np.reshape(data_Dfast, (dim[0],dim[1],dim[2]))
+data_Pfrac  = np.reshape(data_Pfrac, (dim[0],dim[1],dim[2]))
 
 #clip slow (aka ADC)
-data_Dslow[data_Dslow>Dslow_clip]=Dslow_clip
+data_Dslow [data_Dslow >Dslow_clip]=Dslow_clip
 
 #clip fast 
-data_Dfast[data_Dfast<Dfast_thresh]=0
-data_Pfrac[data_Dfast<Dfast_thresh]=0
+data_Dfast [data_Dfast <Dfast_thresh]=0
+data_Pfrac [data_Dfast <Dfast_thresh]=0
 
 #calculate kernel that serves both 2D and 3D acquisitions
 second=np.sort(SpatResol[0:3])[1]; #2nd smalest spatial res 
@@ -443,39 +395,32 @@ data_Pfrac = median_filter (data_Pfrac, size=kernel)
 print ("Gauss  filter results with sigma ",str(sigma_).replace("[","").replace("]","").replace("0. ","0"))
 data_Dslow = gaussian_filter(data_Dslow, sigma=sigma_, truncate=3)
 data_Dfast = gaussian_filter(data_Dfast, sigma=sigma_, truncate=3)
-data_Pfrac = gaussian_filter(data_Pfrac, sigma=sigma_, truncate=3)
+data_Pfrac = gaussian_filter(data_Pfrac, sigma=sigma_, truncate=3) 
 
-''' 
-#decrease resolution
-print ('Decrease resolution 2x'); sys.stdout.flush()
-data_Dslow  = zoom(data_Dslow,[0.5,0.5,1],order=1)
-data_Dfast  = zoom(data_Dfast,[0.5,0.5,1],order=1)
-data_Pfrac  = zoom(data_Pfrac ,[0.5,0.5,1],order=1)   
-'''
+#clip fast again
+data_Dfast [data_Dfast <Dfast_thresh]=0
+data_Pfrac [data_Dfast <Dfast_thresh]=0
 
 #convert ADC unit to 10^-3 mm^2/s
 #(we suppose that Bs are in mm^2/s)
-data_Dslow *= 1e3 
+data_Dslow  *= 1e3 
 #usual in-vivo values:
 #    white matter: 0.6-0.8
 #    grey matter: 0.8-1.0
 #    CSF: 3.0-3.5
 #    restriction (e.g. tumor, stroke) <0.7 
-data_Dfast *= 1e3 # use same unit
+data_Dfast  *= 1e3 # use same unit
          
 #transform to int
-max_Dslow = np.amax(data_Dslow);
+max_Dslow  = np.amax(data_Dslow);
 data_Dslow *= 32767./max_Dslow
 data_Dslow = data_Dslow.astype(np.int16)
-max_Dfast = np.amax(data_Dfast);
+max_Dfast  = np.amax(data_Dfast);
 data_Dfast *= 32767./max_Dfast
 data_Dfast = data_Dfast.astype(np.int16)
-max_Pfrac = np.amax(data_Pfrac);
+max_Pfrac  = np.amax(data_Pfrac);
 data_Pfrac *= 32767./max_Pfrac
 data_Pfrac = data_Pfrac.astype(np.int16)
-max_Residual = np.amax(IMGdata);
-IMGdata *= 32767./max_Residual
-IMGdata = IMGdata.astype(np.int16)
 
 #Write slow diffusion component (aka ADC)
 ADC_img = nib.Nifti1Image(data_Dslow, affine)
