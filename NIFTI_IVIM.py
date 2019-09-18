@@ -1,13 +1,37 @@
 #
-# calculates IVIM parameters
-#  slow diffusion coefficient (aka ADC)
-#  fast diffusion coefficient 
-#  perfusion fraction
+# calculates IVIM parameters by 2-step fitting the formula:
+#   f(b) = A*((1-f)*exp(-b*Dslow) + f*exp(-b*(Dslow+Dfast)))
+#   where:
+#   "Dslow" is the slow diffusion coefficient (aka ADC)
+#   "Dfast: is the fast "diffusion" coefficient related to perfusion (flow, permeability)
+#   and "f" is tyhe perfusion fraction
+# the calculations steps are:
+#   a) fit the slow component to a monoexponential function Aslow*exp(-b*Dslow)
+#      using as "b" only the high b-values
+#   b) subtract the slow component from the data to be fitted
+#   c) fit the fast component to a monoexponential function Afast*exp(-b*Dfast)
+#      using as "b" only the low b-values
+#      (this implicitely supposes dfast>>dslow)
 #      
+# This algorith requiresm a 4D NIFTI file as input 
+# (reconstructed by e.g. BrukerOfflineReco_DWI2D.py)
+# which should cointain (trace averaged) diffusion images 
+# acquired with multiple (possibly non-equally spaced) b-values
+# (e.g. 0,1,2,4,8,16,32,64,128,256,512,1024)
+# if the b-value information is not found in the NIFTI header (as it schould be)
+# the program tries to automatically locate a similarly named ".bval" file
+# that should contain the b-value list in a single line (comma separated)
+#
+# As output the program writes three 3D NIFTI files containing the
+# maps of the three IVIM parameters: 
+# slow and fast diffusion coefficients (ADC) and PerfusionFraction
+# the diffusion coefficients are written in units of 10^-3 mm^2/s
+# (supposing that the b-values are given as usual in mm^2/s)
+#
 #
 # ----- VERSION HISTORY -----
 #
-# Version 0.1 - 20, September 2019
+# Version 0.1 - 18, September 2019
 #       - 1st public github Release
 #
 # ----- LICENSE -----                 
@@ -327,7 +351,7 @@ for i in range(temp_IMGdata.shape[1]):
 print ('Fitting fast diffusion component'); sys.stdout.flush()
 max_b_index = int(floor(2./3.*bval.shape[0]))           # use only low b-values
 if max_b_index<3: max_b_index=3                         # at least 4 (first index is 0)
-if max_b_index>=bval.shape[0]: max_b_index=bval.shape[0]-1 # all
+if max_b_index>bval.shape[0]: max_b_index=bval.shape[0] # all
 Dfast_thresh = 1./(bval[max_b_index-1]*1.)
 if Dfast_thresh<3e-3: Dfast_thresh=3e-3   # water is ~2e-3 (50% safety margin)
 print ("Using B's",str(bval[0:max_b_index].astype(np.int16))\
