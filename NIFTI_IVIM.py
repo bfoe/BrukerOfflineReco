@@ -381,18 +381,19 @@ if __name__ == '__main__':
         temp_Dslow  = np.concatenate ((temp_Dslow, return_vals[i].get()[1]))        
     print (''); sys.stdout.flush()      
 
-    #subtract long component
-    IMGdata_residual = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)
+    #subtract slow component
+    IMGdata_residual1 = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)   
     for j in range(temp_IMGdata.shape[0]):
-        IMGdata_residual[j,:] = temp_IMGdata[j,:] - expdecay(bval,temp_Aslow[j],temp_Dslow [j])
+        IMGdata_residual1[j,:] = temp_IMGdata[j,:] - expdecay(bval,temp_Aslow[j],temp_Dslow [j])
+    #reapply threshold         
+    IMGdata_residual1_masked = IMGdata_residual1
     for i in range(temp_IMGdata.shape[1]):   
-        #reapply threshold 
         #CAUTION: this also remove negative points
         # if the fitting of th slow compontent overestimates the amplitude
         # and/or underestimates the diffusion coefficient this will remove points
         # that could potientially be still meaningfull when fitted
         # with "exp(-x*D)-offset" (we currently don't use an offset)
-        IMGdata_residual[:,i][IMGdata_residual[:,i]<mask_threshold[i]] = 0 
+        IMGdata_residual1_masked[:,i][IMGdata_residual1_masked[:,i]<mask_threshold[i]] = 0 
 
     #fit fast diffusion component
     print ('Fitting fast diffusion component using', cores, 'cores'); sys.stdout.flush()
@@ -405,15 +406,15 @@ if __name__ == '__main__':
     print ("Using B's",str(bval[min_b_index:max_b_index].astype(np.int16))\
            .replace('[','').replace(']','').replace('   ',' ').replace('  ',' '))
     print ("Dfast threshold is",Dfast_thresh*1e3)
-    progress_tag = int(IMGdata_residual.shape[0]/70)
+    progress_tag = int(IMGdata_residual1_masked.shape[0]/70)
     mp_pool = mp.Pool(cores)        
     return_vals=[]    
     for i in range(cores):
-        workpiece=int(ceil(float(IMGdata_residual.shape[0])/float(cores)))
+        workpiece=int(ceil(float(IMGdata_residual1_masked.shape[0])/float(cores)))
         start = i*workpiece
         end   = start+workpiece
-        if end > IMGdata_residual.shape[0]: end = IMGdata_residual.shape[0]  
-        return_vals.append(mp_pool.apply_async(worker_curvefit, args = (bval, IMGdata_residual[start:end,:], progress_tag, min_b_index, max_b_index, 4)))
+        if end > IMGdata_residual1_masked.shape[0]: end = IMGdata_residual1_masked.shape[0]  
+        return_vals.append(mp_pool.apply_async(worker_curvefit, args = (bval, IMGdata_residual1_masked[start:end,:], progress_tag, min_b_index, max_b_index, 4)))
     mp_pool.close()
     mp_pool.join()    
     #get results  
@@ -429,6 +430,21 @@ if __name__ == '__main__':
     nz = np.nonzero (temp_Afast+temp_Aslow)
     temp_Pfrac[nz] = temp_Afast[nz]/(temp_Afast[nz]+temp_Aslow[nz])*100.
 
+    #subtract fast component
+    IMGdata_residual2 = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)
+    for j in range(temp_IMGdata.shape[0]):
+        IMGdata_residual2[j,:] = IMGdata_residual1[j,:] - expdecay(bval,temp_Afast[j],temp_Dfast [j])
+        
+    #derive quality measure
+    IMGdata_residual2_rel = np.zeros(shape=temp_IMGdata.shape, dtype=np.float32)    
+    nz=np.nonzero(temp_IMGdata)
+    IMGdata_residual2_rel[nz] = np.abs(IMGdata_residual2[nz]/temp_IMGdata[nz]*100.) #percentile residual
+    error = np.average(IMGdata_residual2_rel[np.logical_and(IMGdata_residual2_rel>0, IMGdata_residual2_rel<100)])    
+    error = np.round(error,1)
+    print ("Average residual is "+str(error)+"%")
+    print ('.')
+
+    
     #undo vector reduction
     data_Dslow = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
     data_Dfast = np.zeros((dim[0]*dim[1]*dim[2]),dtype=np.float32)
