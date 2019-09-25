@@ -325,19 +325,21 @@ if __name__ == '__main__':
         mask_all = mask_all.astype(np.int16)
     else: #revert to histogram analysis for masking
         #find first min of histogram function
-        steps=100; start=1; fin=np.max(IMGdata[:,:,:,0])
-        xbins =  np.linspace(start,fin,steps)
+        npoints=np.prod(IMGdata[:,:,:,0].shape)
+        steps=int(np.sqrt(npoints)); start=1; fin=np.max(IMGdata[:,:,:,0])
+        xbins = np.linspace(start,fin,steps)
         ybins, binedges = np.histogram(IMGdata[:,:,:,0], bins=xbins)
         ybins = np.resize (ybins,len(xbins)); ybins[len(ybins)-1]=0
-        ybins = smooth(ybins,int(steps/10))
+        ybins = smooth(ybins,int(steps/21))
         i=0;minx=0;miny=ybins[0]
         while i<len(ybins):
             i+=1
             if ybins[i]<=miny: miny=ybins[i]; minx=i; 
             else: i=len(ybins);
-        hist_threshold=xbins[minx]    
+        hist_threshold=xbins[int(minx/2)]
         print ('WARNING: Reverting to background noise removal based on Histogram minimum ' +str(int(hist_threshold)))
         mask_all = IMGdata [:,:,:,0] > hist_threshold
+        mask_all = median_filter (mask_all, size=(5,5,1))    
         IMGdata [:,:,:,:] *= mask_all[:,:,:,None] # apply mask
         mask_threshold=np.zeros(shape=IMGdata.shape[3],dtype=np.float)# for compatibility
     
