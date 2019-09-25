@@ -117,7 +117,7 @@ def FIT (x, y):
     sig = pymc.Uniform('sig', 0, int(a_init/2), value=int(a_init/5)); d['sig'] = sig
     a = pymc.Uniform('a', 0, a_init*10, value=a_init); d['a'] = a
     f = pymc.Uniform('f', 0, 1, value=0); d['f'] = f
-    dfast = pymc.Uniform('dfast', 0, 1./Dwatershed, value=1./Dwatershed); d['dfast'] = dfast #dfast is fitted inverse    
+    dfast = pymc.Uniform('dfast', 0, 2./Dwatershed, value=2./Dwatershed); d['dfast'] = dfast #dfast is fitted inverse    
     dslow = pymc.Uniform('dslow', 0,    Dwatershed, value=   Dwatershed); d['dslow'] = dslow
     #model
     @pymc.deterministic(plot=False)   
@@ -415,12 +415,12 @@ if __name__ == '__main__':
 
     #clip fast 
     if not already_masked:
-       data_Dfast [data_Dfast<5*4e-3]=0 # 5*Dwatershed
-       data_Pfrac [data_Dfast<5*4e-3]=0 # 5*Dwatershed
+       data_Dfast [data_Dfast<4e-3]=0 # Dwatershed
+       data_Pfrac [data_Dfast<4e-3]=0 # Dwatershed
        data_Dfast [data_Pfrac<0.1 ]=0 
        data_Pfrac [data_Pfrac<0.1 ]=0       
     else: print ('WARNING: skipped fast coefficient clipping')
-    
+
     #calculate kernel that serves both 2D and 3D acquisitions
     second=np.sort(SpatResol[0:3])[1]; #2nd smalest spatial res 
     kernel = np.round(float(second)/SpatResol[0:3],0).astype(np.int) # 2nd smalest element is index 1
@@ -447,11 +447,11 @@ if __name__ == '__main__':
 
     #clip again after filter 
     if not already_masked:
-       data_Dfast [data_Dfast<5*4e-3]=0 # 5*Dwatershed
-       data_Pfrac [data_Dfast<5*4e-3]=0 # 5*Dwatershed
+       data_Dfast [data_Dfast<4e-3]=0 # Dwatershed
+       data_Pfrac [data_Dfast<4e-3]=0 # Dwatershed
        data_Dfast [data_Pfrac<0.1 ]=0 
        data_Pfrac [data_Pfrac<0.1 ]=0   
-    
+
     #convert ADC unit to 10^-3 mm^2/s
     #(we suppose that Bs are in mm^2/s)
     data_Dslow  *= 1e3 
