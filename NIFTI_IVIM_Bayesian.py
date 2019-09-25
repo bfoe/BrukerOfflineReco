@@ -114,11 +114,11 @@ def FIT (x, y):
     Dwatershed=4e-3 # 2x free water (2e-3)
     #priors
     d={}
-    sig = pymc.Uniform('sig', 0, int(a_init/2), value=int(a_init/5)); d['sig'] = sig
-    a = pymc.Uniform('a', 0, a_init*10, value=a_init); d['a'] = a
-    f = pymc.Uniform('f', 0, 1, value=0); d['f'] = f
-    dfast = pymc.Uniform('dfast', 0, 2./Dwatershed, value=2./Dwatershed); d['dfast'] = dfast #dfast is fitted inverse    
-    dslow = pymc.Uniform('dslow', 0,    Dwatershed, value=   Dwatershed); d['dslow'] = dslow
+    sig = pymc.Uniform('sig', 0, int(a_init/2)); d['sig'] = sig
+    a = pymc.Uniform('a', 0, a_init*10); d['a'] = a
+    f = pymc.Uniform('f', 0, 1); d['f'] = f
+    dfast = pymc.Uniform('dfast', 0.1, 2./Dwatershed); d['dfast'] = dfast #dfast is fitted inverse    
+    dslow = pymc.Uniform('dslow', 0  ,    Dwatershed); d['dslow'] = dslow    
     #model
     @pymc.deterministic(plot=False)   
     def mod_IVIM(x=x, a=a, f=f, dfast=dfast, dslow=dslow):

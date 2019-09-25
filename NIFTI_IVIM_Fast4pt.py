@@ -321,7 +321,7 @@ else: #revert to histogram analysis for masking
         else: i=len(ybins);
     hist_threshold=xbins[int(minx/2)]
     print ('WARNING: Reverting to background noise removal based on Histogram minimum ' +str(int(hist_threshold)))
-    mask_all = IMGdata [:,:,:,0] > hist_threshold
+    mask_all = IMGdata [:,:,:,0] > hist_threshold   
     mask_all = median_filter (mask_all, size=(5,5,1))    
     IMGdata [:,:,:,:] *= mask_all[:,:,:,None] # apply mask
     mask_threshold=np.zeros(shape=IMGdata.shape[3],dtype=np.float)# for compatibility
