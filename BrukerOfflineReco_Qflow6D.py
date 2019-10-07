@@ -62,6 +62,7 @@ import sys
 import os
 import numpy as np
 import nibabel as nib
+from InputFloat import InputFloat
 if getattr( sys, 'frozen', False ): # running as pyinstaller bundle
    from scipy_extract import zoom
    from scipy_extract import median_filter
@@ -234,6 +235,17 @@ TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
+# read Image Cleanup factor from keyboard
+# this factor acts on two fronts
+# - modifies the form the threshold for background noise removal is established
+#   Threshold = Noise_Average + N*Noise_StandardDeviation 
+#   (see section "use noise in all 8 corners to establish threshold" below)
+# - minimum cluster threshold
+#   (see section "clear up mask by removing isolated clusters " below)            
+CleanupFactor = InputFloat('Image Cleanup factor', 1.0, 10)        
+if CleanupFactor<1.0: CleanupFactor=1.0
+if CleanupFactor>5.0: CleanupFactor=5.0 
+
 #read FID (main & ref)
 with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
@@ -324,6 +336,7 @@ if haveRef:
         print ('ERROR: Parameter mismatch beteen Main and Reference files (Angulations)'); 
         sys.exit(1)    
 
+        
 # read input from keyboard
 if not haveRef:
     xcor=0; ycor=0; zcor=0
@@ -439,7 +452,7 @@ if npoints_x>3:
     hanning_x [hanning_x.shape[0]-npoints_x:hanning_x.shape[0]] = np.power(np.sin(x_),2)
     #print (hanning_x)
     FIDdata[:,:,:,:] *= hanning_x [:,None,None,None]
-    npoints_y = int(float(dim[1])*percentage/100.)
+npoints_y = int(float(dim[1])*percentage/100.)
 if npoints_y>3:
     hanning_y = np.empty(shape=(dim[1]),dtype=np.float32)
     y_ = np.linspace (1./(npoints_y-1.)*np.pi/2.,(1.-1./(npoints_y-1))*np.pi/2.,num=npoints_y)
@@ -449,7 +462,7 @@ if npoints_y>3:
     hanning_y [hanning_y.shape[0]-npoints_y:hanning_y.shape[0]] = np.power(np.sin(y_),2)
     #print (hanning_y)
     FIDdata[:,:,:,:] *= hanning_y [None,None,:,None]
-    npoints_z = int(float(dim[2])*percentage/100.)
+npoints_z = int(float(dim[2])*percentage/100.)
 if npoints_z>3:
     hanning_z = np.empty(shape=(dim[2]),dtype=np.float32)
     z_ = np.linspace (1./(npoints_z-1.)*np.pi/2.,(1.-1./(npoints_z-1))*np.pi/2.,num=npoints_z)
@@ -800,6 +813,7 @@ print('.', end='') #progress indicator
 image_number = 4 # 0 is static, 4 is flow
 N=10 # use 10% at the corners of the FOV
 std_fac = 6 # how many standard deviations to add
+std_fac *= CleanupFactor
 tresh=np.empty(shape=8,dtype=np.float)
 avg=np.empty(shape=8,dtype=np.float)
 std=np.empty(shape=8,dtype=np.float)
@@ -877,6 +891,7 @@ mask = mask.astype(np.int16)
 # clear up mask by removing isolated clusters 
 # which are smaller than N interconnected points
 N = math.ceil( 2.5 * zero_fill**3)
+N *= CleanupFactor
 s = [[[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]], [[1,1,1],[1,1,1],[1,1,1]]]
 labeled_mask, num_clusters = label(mask, structure=s)
 unique, counts = np.unique(labeled_mask, return_counts=True)
@@ -979,6 +994,7 @@ print ('\nSuccessfully written output files '+OrigFilename+'_*.nii.gz')
 #write flowvolume results
 if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Image Cleanup Factor: %f\n" % CleanupFactor)
         text_file.write("Flow Volumes per slice (X):\n")
         for i in range(0,IMGdata_decoded_PH.shape[2]): # in our data shape[2] is the main flow direction
             flowvol = np.sum(IMGdata_decoded_PH[:,1,i,:])
@@ -989,6 +1005,7 @@ if METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPack
         text_file.write("\n")
 elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Image Cleanup Factor: %f\n" % CleanupFactor)
         text_file.write("Flow Volumes per slice (X):\n")
         for i in range(0,IMGdata_decoded_PH.shape[2]): # in our data shape[2] is the main flow direction
             flowvol = np.sum(IMGdata_decoded_PH[:,2,i,:])
@@ -998,7 +1015,8 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "sagittal" and METHODdata["PVM_SPa
             text_file.write("Slice %d:\t%0.2f\tml/s\n" % (i, flowvol))
         text_file.write("\n")               
 elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPackArrReadOrient"] == "H_F":
-    with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:    
+    with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Image Cleanup Factor: %f\n" % CleanupFactor)  
         text_file.write("Flow Volumes per slice (X):\n")
         for i in range(0,IMGdata_decoded_PH.shape[0]): # in our data shape[2] is the main flow direction
             flowvol = np.sum(IMGdata_decoded_PH[i,1,:,:])
@@ -1009,6 +1027,7 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal" and METHODdata["PVM_SPac
         text_file.write("\n")        
 elif METHODdata["PVM_SPackArrSliceOrient"] == "axial" and METHODdata["PVM_SPackArrReadOrient"] == "A_P":
     with open(os.path.join(os.path.dirname(FIDfile),OrigFilename+'_FlowVolumes.txt'), "w") as text_file:
+        text_file.write("Image Cleanup Factor:\f\n" % CleanupFactor)
         text_file.write("Flow Volumes per slice (X):\n")
         for i in range(0,IMGdata_decoded_PH.shape[3]): # in our data shape[2] is the main flow direction
             flowvol = np.sum(IMGdata_decoded_PH[:,3,:,i])
