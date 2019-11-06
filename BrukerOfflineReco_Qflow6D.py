@@ -235,17 +235,6 @@ TKwindows.update()
 try: win32gui.SetForegroundWindow(win32console.GetConsoleWindow())
 except: pass #silent
 
-# read Image Cleanup factor from keyboard
-# this factor acts on two fronts
-# - modifies the form the threshold for background noise removal is established
-#   Threshold = Noise_Average + N*Noise_StandardDeviation 
-#   (see section "use noise in all 8 corners to establish threshold" below)
-# - minimum cluster threshold
-#   (see section "clear up mask by removing isolated clusters " below)            
-CleanupFactor = InputFloat('Image Cleanup factor', 1.0, 10)        
-if CleanupFactor<1.0: CleanupFactor=1.0
-if CleanupFactor>5.0: CleanupFactor=5.0 
-
 #read FID (main & ref)
 with open(FIDfile, "rb") as f: FIDrawdata= np.fromfile(f, dtype=np.int32) 
 FIDrawdata_CPX = FIDrawdata[0::2] + 1j * FIDrawdata[1::2]
@@ -336,7 +325,18 @@ if haveRef:
         print ('ERROR: Parameter mismatch beteen Main and Reference files (Angulations)'); 
         sys.exit(1)    
 
-        
+# read Image Cleanup factor from keyboard
+# this factor acts on two fronts
+# - modifies the form the threshold for background noise removal is established
+#   Threshold = Noise_Average + N*Noise_StandardDeviation 
+#   (see section "use noise in all 8 corners to establish threshold" below)
+# - minimum cluster threshold
+#   (see section "clear up mask by removing isolated clusters " below)
+default = METHODdata["PVM_EchoTime"] - 2.6            
+CleanupFactor = InputFloat('Image Cleanup factor', default, 10)        
+if CleanupFactor<1.0: CleanupFactor=1.0
+if CleanupFactor>5.0: CleanupFactor=5.0 
+     
 # read input from keyboard
 if not haveRef:
     xcor=0; ycor=0; zcor=0
