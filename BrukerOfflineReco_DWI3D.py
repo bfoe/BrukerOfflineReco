@@ -241,11 +241,17 @@ if METHODdata["PVM_EncPpiAccel1"] != 1 or METHODdata["PVM_EncNReceivers"] != 1 o
     
 #start
 print ('Starting recon') 
-bvec = np.asarray([0])
+if METHODdata["PVM_DwAoImages"]==0: bvec = np.asarray([])
+else: bvec = np.asarray([0]) # this is the normal case
 bvec = np.append (bvec, METHODdata["PVM_DwBvalEach"]).astype(int)
 bvec_str = np.array2string(bvec).replace("[","").replace("]","")
 bvec_str = bvec_str.replace("    "," ").replace("   "," ").replace("  "," ").replace(" ",",")
 bvec_str = bvec_str[1:len(bvec_str)]
+
+if METHODdata["PVM_DwAoImages"]==0 and bvec[0]!=0:
+    print ('ERROR: first image must B0, either explicit (number of A0 images >0)')
+    print ('       or 0 as FIRST(!!!) entry in b value array') 
+    sys.exit(1)
 
 #reshape FID data according to dimensions from method file
 #"order="F" means Fortran style order as by BRUKER conventions
@@ -530,6 +536,7 @@ print('.', end='') #progress indicator
 if METHODdata["PVM_DiffPrepMode"]!="DoubleSpinEcho":
     N = 10 #neighbouring pixels  to search
     n_B0 = METHODdata["PVM_DwAoImages"]
+    if n_B0==0: n_B0=1 # then the first bvalue is supposed to be B0
     for k in range(n_B0,dim[1]):
         max_cor = 0.0; best = 0    
         for i in range(-N,N):
@@ -593,8 +600,8 @@ elif METHODdata["PVM_SPackArrSliceOrient"] == "coronal":
         SpatResol_perm[0]=SpatResol[0]
         SpatResol_perm[1]=SpatResol[2]
         SpatResol_perm[2]=SpatResol[1]
-        IMGdata = np.transpose (IMGdata, axes=(0,3,2,1))        
-        IMGdata = IMGdata[::-1,:,::-1,::-1] # flip axis 
+        IMGdata = np.transpose (IMGdata, axes=(0,2,3,1)) #this looks correct now      
+        IMGdata = IMGdata[::-1,::-1,::-1,:] # flip axis
     elif METHODdata["PVM_SPackArrReadOrient"] == "H_F":
         SpatResol_perm = np.empty(shape=(3))
         SpatResol_perm[0]=SpatResol[0]
@@ -679,7 +686,7 @@ tresh[7]=avg[7] + 4*std[7]
 threshold=np.min(tresh)
 image_number = 0 # 0 is B0
 mask = abs(IMGdata [:,:,:,image_number]) > threshold
-mask = median_filter  (mask, size = (3,3,1)) #median filter
+mask = median_filter  (mask, size = (3,3,3)) #median filter
  
 #calc averages
 ReceiverGain = ACQPdata["RG"] # RG is a simple attenuation FACTOR, NOT in dezibel (dB) unit !!!
@@ -687,14 +694,16 @@ n_Averages = METHODdata["PVM_NAverages"]
 IMGdata = IMGdata/ReceiverGain/n_Averages
 n_B0 = METHODdata["PVM_DwAoImages"]
 n_Bs=int(METHODdata["PVM_DwNDiffExpEach"])
-IMGdata_Bs = np.zeros (shape=(IMGdata.shape[0],IMGdata.shape[1],IMGdata.shape[2],n_Bs+1), dtype=np.float32)
-IMGdata_Bs[:,:,:,0] = np.average(np.abs(IMGdata[:,:,:,0:n_B0]),axis=3) 
-#IMGdata_Bs[:,:,:,0] = np.abs(np.average(IMGdata[:,:,:,0:n_B0],axis=3)) #not a good idea for IVIM fitting
-for i in range(1,bvec.shape[0]):
-  IMGdata_Bs[:,:,:,i] = np.average(np.abs(IMGdata[:,:,:,n_B0+i-1::n_Bs]),axis=3) 
-  #IMGdata_Bs[:,:,:,i] = np.abs(np.average(IMGdata[:,:,:,n_B0+i-1::n_Bs],axis=3)) #not a good idea for IVIM fitting
-  #the threshold algorithm supposedly gets convused by non-white noise  
-
+if n_B0==0:# no explicit B0 image, should be implicit in bavalue array
+    IMGdata_Bs = np.zeros (shape=(IMGdata.shape[0],IMGdata.shape[1],IMGdata.shape[2],n_Bs), dtype=np.float32)
+    for i in range(0,bvec.shape[0]):
+      IMGdata_Bs[:,:,:,i] = np.average(np.abs(IMGdata[:,:,:,i::n_Bs]),axis=3) 
+else: # this is the normal case
+    IMGdata_Bs = np.zeros (shape=(IMGdata.shape[0],IMGdata.shape[1],IMGdata.shape[2],n_Bs+1), dtype=np.float32)
+    IMGdata_Bs[:,:,:,0] = np.average(np.abs(IMGdata[:,:,:,0:n_B0]),axis=3)
+    for i in range(1,bvec.shape[0]):
+      IMGdata_Bs[:,:,:,i] = np.average(np.abs(IMGdata[:,:,:,n_B0+i-1::n_Bs]),axis=3)
+    
 #calc ADC
 IMGdata_ADC  = -1.0*np.log(IMGdata_Bs[:,:,:,-1]/IMGdata_Bs[:,:,:,0])/bvec[-1]
 IMGdata_ADC [IMGdata_ADC<=0] = 0 # mask negative values (this happens where tmp2>tmp1, which cannot be true)
