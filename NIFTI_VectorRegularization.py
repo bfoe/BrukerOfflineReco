@@ -372,9 +372,9 @@ print ('Writing regularized X,Y,Z Components ', end='')
 image_SOS = np.sqrt(np.square(Xcomponent_np) + np.square(Ycomponent_np) + np.square(Zcomponent_np))
 max_SOS = np.amax(image_SOS)
 image_SOS *= 32767./max_SOS; image_SOS = image_SOS.astype(np.int16)
-max_X = np.amax(Xcomponent_np);
-max_Y = np.amax(Ycomponent_np);
-max_Z = np.amax(Zcomponent_np);
+max_X = np.amax(np.abs(Xcomponent_np));
+max_Y = np.amax(np.abs(Ycomponent_np));
+max_Z = np.amax(np.abs(Zcomponent_np));
 max_ALL = max (max_X,max_Y,max_Z)
 Xcomponent_np *= 32767./max_ALL; Xcomponent_np = Xcomponent_np.astype(np.int16)
 Ycomponent_np *= 32767./max_ALL; Ycomponent_np = Ycomponent_np.astype(np.int16)
